@@ -104,10 +104,12 @@ OLLAMA_BASE_URL=http://remote:11434 python main.py
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
-from core.skill_base import OpenClawSkill
+from core.tool_base import OpenClawSkill
+
 
 class MyInput(BaseModel):
     query: str = Field(description="What to look up")
+
 
 class MyTool(BaseTool):
     name: str = "my_tool"
@@ -119,6 +121,7 @@ class MyTool(BaseTool):
 
     async def _arun(self, *args, **kwargs) -> str:
         return self._run(*args, **kwargs)
+
 
 class MySkill(OpenClawSkill):
     name = "my_skill"

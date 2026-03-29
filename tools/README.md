@@ -29,7 +29,7 @@ skills/
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
-from core.skill_base import OpenClawSkill
+from core.tool_base import OpenClawSkill
 
 
 class MyToolInput(BaseModel):

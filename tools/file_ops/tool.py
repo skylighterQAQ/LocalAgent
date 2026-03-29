@@ -1,11 +1,15 @@
-"""File operations skill for OpenClaw - read/write local files."""
+"""
+Example custom tool: Operations
+Place this file at tools/operations/tool.py to activate it.
+Then add "operations" to the tools list in config/config.yaml.
+"""
 import os
 from pathlib import Path
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from core.skill_base import OpenClawSkill
+from core.tool_base import LocalAgentTool
 
 
 class ReadFileInput(BaseModel):
@@ -23,7 +27,7 @@ class ListDirInput(BaseModel):
     path: str = Field(default=".", description="Directory path to list")
 
 
-class ReadFileTool(BaseTool):
+class _ReadFileTool(BaseTool):
     name: str = "file_read"
     description: str = "Read the contents of a local file. Returns the file content as text."
     args_schema: Type[BaseModel] = ReadFileInput
@@ -47,7 +51,7 @@ class ReadFileTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class WriteFileTool(BaseTool):
+class _WriteFileTool(BaseTool):
     name: str = "file_write"
     description: str = "Write or append content to a local file. Creates the file if it doesn't exist."
     args_schema: Type[BaseModel] = WriteFileInput
@@ -67,7 +71,7 @@ class WriteFileTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class ListDirTool(BaseTool):
+class _ListDirTool(BaseTool):
     name: str = "file_list_dir"
     description: str = "List files and directories in a given path."
     args_schema: Type[BaseModel] = ListDirInput
@@ -91,10 +95,10 @@ class ListDirTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class FileOpsSkill(OpenClawSkill):
+class FileOpsTool(LocalAgentTool):
     name = "file_ops"
     description = "Read, write, and list local files"
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [ReadFileTool(), WriteFileTool(), ListDirTool()]
+        return [_ReadFileTool(), _WriteFileTool(), _ListDirTool()]

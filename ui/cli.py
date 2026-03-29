@@ -18,12 +18,12 @@ from rich.layout import Layout
 console = Console()
 
 BANNER = """
- ██████╗ ██████╗ ███████╗███╗   ██╗ ██████╗██╗      █████╗ ██╗    ██╗
-██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝██║     ██╔══██╗██║    ██║
-██║   ██║██████╔╝█████╗  ██╔██╗ ██║██║     ██║     ███████║██║ █╗ ██║
-██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║██║     ██║     ██╔══██║██║███╗██║
-╚██████╔╝██║     ███████╗██║ ╚████║╚██████╗███████╗██║  ██║╚███╔███╔╝
- ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝ 
+██╗      ██████╗  ██████╗ █████╗ ██╗      █████╗  ██████╗ ███████╗███╗   ██╗████████╗
+██║     ██╔═══██╗██╔════╝██╔══██╗██║     ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝
+██║     ██║   ██║██║     ███████║██║     ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   
+██║     ██║   ██║██║     ██╔══██║██║     ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   
+███████╗╚██████╔╝╚██████╗██║  ██║███████╗██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   
+╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   
 """
 
 
@@ -32,13 +32,25 @@ def print_banner(model: str, skills: list[dict]) -> None:
     console.print(
         Panel(
             f"[bold green]Model:[/bold green] [cyan]{model}[/cyan]\n"
-            f"[bold green]Loaded skills:[/bold green] {', '.join(s['name'] for s in skills) or 'none'}",
+            f"[bold green]Loaded tools:[/bold green] {', '.join(s['name'] for s in skills) or 'none'}",
             title="[bold white]OpenClaw — Local AI Agent[/bold white]",
             border_style="cyan",
             padding=(0, 2),
         )
     )
     console.print()
+
+
+def print_tools_table(tools: list[dict]) -> None:
+    table = Table(box=box.ROUNDED, border_style="dim cyan", show_header=True)
+    table.add_column("Tool", style="bold cyan")
+    table.add_column("Description")
+    table.add_column("Version", style="dim")
+
+    for s in tools:
+        table.add_row(s["name"], s["description"], s.get("version", "?"))
+
+    console.print(table)
 
 
 def print_skills_table(skills: list[dict]) -> None:
@@ -84,7 +96,7 @@ def print_tool_call(tool_name: str, args: dict) -> None:
 
 COMMANDS = {
     "/help": "Show this help",
-    "/skills": "List loaded skills",
+    "/tools": "List loaded tools",
     "/clear": "Clear conversation history",
     "/model": "Show current model",
     "/exit": "Exit OpenClaw",
@@ -106,9 +118,9 @@ def handle_command(cmd: str, context: dict) -> bool:
             table.add_row(f"[bold cyan]{k}[/bold cyan]", v)
         console.print(table)
 
-    elif cmd == "/skills":
-        from core.skill_base import get_registry
-        print_skills_table(get_registry().list_skills())
+    elif cmd == "/tools":
+        from core.tool_base import get_registry
+        print_skills_table(get_registry().list_tools())
 
     elif cmd == "/clear":
         context["history"].clear()

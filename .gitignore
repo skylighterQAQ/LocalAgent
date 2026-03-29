@@ -96,3 +96,5 @@ Thumbs.db
 .env
 *.env
 config.yaml
+
+localagent.log

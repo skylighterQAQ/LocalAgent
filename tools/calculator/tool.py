@@ -1,21 +1,21 @@
 """
-Example custom skill: Calculator
-Place this file at skills/calculator/skill.py to activate it.
-Then add "calculator" to the skills list in config/config.yaml.
+Example custom tool: Calculator
+Place this file at tools/calculator/tool.py to activate it.
+Then add "calculator" to the tools list in config/config.yaml.
 """
 import math
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from core.skill_base import OpenClawSkill
+from core.tool_base import LocalAgentTool
 
 
 class CalcInput(BaseModel):
     expression: str = Field(description="Mathematical expression to evaluate, e.g. 'sqrt(144) + pi'")
 
 
-class CalculatorTool(BaseTool):
+class _CalculatorTool(BaseTool):
     name: str = "calculator"
     description: str = (
         "A safe mathematical calculator. Supports: +, -, *, /, **, sqrt, log, sin, cos, tan, pi, e. "
@@ -57,10 +57,10 @@ class CalculatorTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class CalculatorSkill(OpenClawSkill):
+class CalculatorTool(LocalAgentTool):
     name = "calculator"
     description = "Safe mathematical calculator with common math functions"
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [CalculatorTool()]
+        return [_CalculatorTool()]

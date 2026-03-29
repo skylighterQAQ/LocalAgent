@@ -1,11 +1,15 @@
-"""Browser skill for OpenClaw - fetch and parse web pages."""
+"""
+Example custom tool: Browser
+Place this file at tools/browser/tool.py to activate it.
+Then add "browser" to the tools list in config/config.yaml.
+"""
 from typing import Any, List, Optional, Type
 import requests
 from bs4 import BeautifulSoup
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
-from core.skill_base import OpenClawSkill
+from core.tool_base import LocalAgentTool
 
 
 class FetchPageInput(BaseModel):
@@ -18,7 +22,7 @@ class ClickableLinkInput(BaseModel):
     url: str = Field(description="The URL to extract links from")
 
 
-class FetchPageTool(BaseTool):
+class _FetchPageTool(BaseTool):
     name: str = "browser_fetch_page"
     description: str = (
         "Fetch and read the content of a web page. "
@@ -54,7 +58,7 @@ class FetchPageTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class ExtractLinksTool(BaseTool):
+class _ExtractLinksTool(BaseTool):
     name: str = "browser_extract_links"
     description: str = (
         "Extract all hyperlinks from a web page. "
@@ -90,10 +94,10 @@ class ExtractLinksTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class BrowserSkill(OpenClawSkill):
+class BrowserTool(LocalAgentTool):
     name = "browser"
     description = "Web browsing - fetch pages and extract links"
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [FetchPageTool(), ExtractLinksTool()]
+        return [_FetchPageTool(), _ExtractLinksTool()]

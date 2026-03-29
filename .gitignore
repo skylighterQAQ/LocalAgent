@@ -1,0 +1,98 @@
+# ========================
+# Python 编译文件 / 缓存
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C 扩展
+*.so
+
+# ========================
+# 构建 / 发布
+# ========================
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ========================
+# 虚拟环境
+# ========================
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# ========================
+# PyInstaller
+# ========================
+*.manifest
+*.spec
+
+# ========================
+# 日志 / 数据库
+# ========================
+*.log
+*.sqlite3
+*.db
+
+# ========================
+# 测试 / 覆盖率
+# ========================
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ========================
+# Jupyter Notebook
+# ========================
+.ipynb_checkpoints
+
+# ========================
+# IDE 配置
+# ========================
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# VS Code
+.vscode/
+.history/
+*.code-workspace
+
+# ========================
+# 系统文件
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# 可选：环境 / 配置文件
+# ========================
+.env
+*.env
+config.yaml

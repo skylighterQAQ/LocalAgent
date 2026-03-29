@@ -1,15 +1,11 @@
-"""
-Example custom tool: Operations
-Place this file at tools/operations/tool.py to activate it.
-Then add "operations" to the tools list in config/config.yaml.
-"""
+"""File operations skill for LocalAgent - read/write local files."""
 import os
 from pathlib import Path
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from core.tool_base import LocalAgentTool
+from core.skill_base import OpenClawSkill
 
 
 class ReadFileInput(BaseModel):
@@ -32,7 +28,7 @@ class MakeDirInput(BaseModel):
     name: str = Field(description="Name of directory")
 
 
-class _ReadFileTool(BaseTool):
+class ReadFileTool(BaseTool):
     name: str = "file_read"
     description: str = "Read the contents of a local file. Returns the file content as text."
     args_schema: Type[BaseModel] = ReadFileInput
@@ -56,7 +52,7 @@ class _ReadFileTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class _WriteFileTool(BaseTool):
+class WriteFileTool(BaseTool):
     name: str = "file_write"
     description: str = "Write or append content to a local file. Creates the file if it doesn't exist."
     args_schema: Type[BaseModel] = WriteFileInput
@@ -76,7 +72,7 @@ class _WriteFileTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class _ListDirTool(BaseTool):
+class ListDirTool(BaseTool):
     name: str = "file_list_dir"
     description: str = "List files and directories in a given path."
     args_schema: Type[BaseModel] = ListDirInput
@@ -100,7 +96,7 @@ class _ListDirTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class _MakeDirTool(BaseTool):
+class MakeDirTool(BaseTool):
     name: str = "make_dir"
     description: str = "Make local directories in a given path."
     args_schema: Type[BaseModel] = MakeDirInput
@@ -117,10 +113,10 @@ class _MakeDirTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class FileOpsTool(LocalAgentTool):
+class FileOpsSkill(OpenClawSkill):
     name = "file_ops"
     description = "Read, write, list local files and make new directories."
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [_ReadFileTool(), _WriteFileTool(), _ListDirTool(), _MakeDirTool()]
+        return [ReadFileTool(), WriteFileTool(), ListDirTool(), MakeDirTool()]

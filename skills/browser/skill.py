@@ -1,15 +1,11 @@
-"""
-Example custom tool: Browser
-Place this file at tools/browser/tool.py to activate it.
-Then add "browser" to the tools list in config/config.yaml.
-"""
+"""Browser skill for LocalAgent - fetch and parse web pages."""
 from typing import Any, List, Optional, Type
 import requests
 from bs4 import BeautifulSoup
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
-from core.tool_base import LocalAgentTool
+from core.skill_base import OpenClawSkill
 
 
 class FetchPageInput(BaseModel):
@@ -22,7 +18,7 @@ class ClickableLinkInput(BaseModel):
     url: str = Field(description="The URL to extract links from")
 
 
-class _FetchPageTool(BaseTool):
+class FetchPageTool(BaseTool):
     name: str = "browser_fetch_page"
     description: str = (
         "Fetch and read the content of a web page. "
@@ -34,7 +30,7 @@ class _FetchPageTool(BaseTool):
     def _run(self, url: str, extract_text_only: bool = True, max_chars: int = 4000) -> str:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (compatible; OpenClaw/1.0; +https://github.com/openclaw)"
+                "User-Agent": "Mozilla/5.0 (compatible; LocalAgent/1.0; +https://github.com/LocalAgent)"
             }
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
@@ -58,7 +54,7 @@ class _FetchPageTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class _ExtractLinksTool(BaseTool):
+class ExtractLinksTool(BaseTool):
     name: str = "browser_extract_links"
     description: str = (
         "Extract all hyperlinks from a web page. "
@@ -69,7 +65,7 @@ class _ExtractLinksTool(BaseTool):
 
     def _run(self, url: str) -> str:
         try:
-            headers = {"User-Agent": "Mozilla/5.0 (compatible; OpenClaw/1.0)"}
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; LocalAgent/1.0)"}
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
 
@@ -94,10 +90,10 @@ class _ExtractLinksTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class BrowserTool(LocalAgentTool):
+class BrowserSkill(OpenClawSkill):
     name = "browser"
     description = "Web browsing - fetch pages and extract links"
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [_FetchPageTool(), _ExtractLinksTool()]
+        return [FetchPageTool(), ExtractLinksTool()]

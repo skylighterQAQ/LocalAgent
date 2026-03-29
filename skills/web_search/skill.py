@@ -1,15 +1,11 @@
-"""
-Example custom tool: Search
-Place this file at tools/search/tool.py to activate it.
-Then add "search" to the tools list in config/config.yaml.
-"""
+"""Web search skill for LocalAgent - DuckDuckGo search (no API key required)."""
 from typing import Any, List, Type
 import requests
 from bs4 import BeautifulSoup
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from core.tool_base import LocalAgentTool
+from core.skill_base import OpenClawSkill
 
 
 class SearchInput(BaseModel):
@@ -17,7 +13,7 @@ class SearchInput(BaseModel):
     num_results: int = Field(default=5, description="Number of results to return (1-10)")
 
 
-class _DuckDuckGoSearchTool(BaseTool):
+class DuckDuckGoSearchTool(BaseTool):
     name: str = "web_search"
     description: str = (
         "Search the web using DuckDuckGo. "
@@ -29,7 +25,7 @@ class _DuckDuckGoSearchTool(BaseTool):
     def _run(self, query: str, num_results: int = 5) -> str:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (compatible; OpenClaw/1.0)"
+                "User-Agent": "Mozilla/5.0 (compatible; LocalAgent/1.0)"
             }
             # DuckDuckGo HTML search endpoint
             params = {"q": query, "kl": "us-en"}
@@ -70,10 +66,10 @@ class _DuckDuckGoSearchTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class WebSearchTool(LocalAgentTool):
+class WebSearchSkill(OpenClawSkill):
     name = "web_search"
     description = "Search the web using DuckDuckGo (no API key required)"
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [_DuckDuckGoSearchTool()]
+        return [DuckDuckGoSearchTool()]

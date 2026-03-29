@@ -1,6 +1,6 @@
-# OpenClaw Skills
+# LocalAgent Skills
 
-Skills are self-contained plugins that add tools to the OpenClaw agent.
+Skills are self-contained plugins that add tools to the LocalAgent agent.
 
 ## Directory Structure
 
@@ -29,7 +29,7 @@ skills/
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
-from core.tool_base import OpenClawSkill
+from core.skill_base import OpenClawSkill
 
 
 class MyToolInput(BaseModel):
@@ -59,7 +59,7 @@ class MySkill(OpenClawSkill):
 ```
 
 3. Add `"my_skill"` to the `skills` list in `config/config.yaml`
-4. Restart OpenClaw
+4. Restart LocalAgent
 
 ## Tips
 

@@ -1,8 +1,4 @@
-"""
-Example custom tool: Execution
-Place this file at tools/execution/tool.py to activate it.
-Then add "execution" to the tools list in config/config.yaml.
-"""
+"""Code execution skill for LocalAgent - run Python scripts safely."""
 import sys
 import io
 import traceback
@@ -13,7 +9,7 @@ from typing import Any, List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from core.tool_base import LocalAgentTool
+from core.skill_base import OpenClawSkill
 from core.config_loader import get_config
 
 
@@ -22,7 +18,7 @@ class RunPythonInput(BaseModel):
     capture_output: bool = Field(default=True, description="If True, capture and return stdout/stderr")
 
 
-class _RunPythonFileTool(BaseTool):
+class RunPythonFileTool(BaseTool):
     name: str = "code_run_python"
     description: str = (
         "Execute Python code and return the output. "
@@ -77,7 +73,7 @@ class EvalExpressionInput(BaseModel):
     expression: str = Field(description="A single Python expression to evaluate (not a full script)")
 
 
-class _EvalExpressionTool(BaseTool):
+class EvalExpressionTool(BaseTool):
     name: str = "code_eval_expression"
     description: str = (
         "Evaluate a single Python expression and return its value. "
@@ -97,10 +93,10 @@ class _EvalExpressionTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class CodeExecTool(LocalAgentTool):
+class CodeExecSkill(OpenClawSkill):
     name = "code_exec"
     description = "Execute Python code and scripts"
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [_RunPythonFileTool(), _EvalExpressionTool()]
+        return [RunPythonFileTool(), EvalExpressionTool()]

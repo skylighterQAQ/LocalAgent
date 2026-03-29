@@ -1,4 +1,4 @@
-"""LangGraph-based ReAct agent for OpenClaw."""
+"""LangGraph-based ReAct agent for LocalAgent."""
 from typing import Annotated, Any, Dict, List, Sequence, TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_ollama import ChatOllama
@@ -7,7 +7,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
 
 from core.config_loader import get_config
-from core.tool_base import get_registry as get_tool_registry
+from core.skill_base import get_registry
 
 
 # ── Graph state ────────────────────────────────────────────────────────────────
@@ -18,15 +18,15 @@ class AgentState(TypedDict):
 
 # ── System prompt ──────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are OpenClaw, a powerful AI assistant built on Ollama and LangGraph.
-You have access to a variety of tools (tools) that you can use to help users.
+SYSTEM_PROMPT = """You are LocalAgent, a powerful AI assistant built on Ollama and LangGraph.
+You have access to a variety of tools (skills) that you can use to help users.
 
 Available capabilities:
 - Browse the web and read web pages
 - Execute Python code and scripts
 - Search the internet
 - Read and write local files
-- Any custom tools that have been configured
+- Any custom skills that have been configured
 
 Guidelines:
 - Always think step by step before using tools
@@ -43,10 +43,10 @@ You are running locally via Ollama. Your responses are private and secure."""
 def create_agent(extra_tools: List[Any] | None = None):
     """Build the LangGraph ReAct agent with all registered tools."""
     cfg = get_config()
-    tool_registry = get_tool_registry()
+    registry = get_registry()
 
-    # Gather tools from all loaded tools
-    tools = tool_registry.get_all_tools()
+    # Gather tools from all loaded skills
+    tools = registry.get_all_tools()
     if extra_tools:
         tools.extend(extra_tools)
 

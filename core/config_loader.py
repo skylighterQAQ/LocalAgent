@@ -1,4 +1,4 @@
-"""Configuration management for OpenClaw."""
+"""Configuration management for LocalAgent."""
 import os
 import yaml
 from pathlib import Path
@@ -27,13 +27,13 @@ class CodeExecConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    file: str = "openclaw.log"
+    file: str = "LocalAgent.log"
 
 
 class AppConfig(BaseModel):
     ollama: OllamaConfig = Field(default_factory=OllamaConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
-    tools: list[str] = Field(default_factory=lambda: ["browser", "code_exec", "web_search", "file_ops"])
+    skills: list[str] = Field(default_factory=lambda: ["browser", "code_exec", "web_search", "file_ops"])
     code_exec: CodeExecConfig = Field(default_factory=CodeExecConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
@@ -50,7 +50,7 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         search_paths = [
             Path("config/config.yaml"),
             Path("config.yaml"),
-            Path.home() / ".LocalAgent" / "config.yaml",
+            Path.home() / ".localagent" / "config.yaml",
         ]
         for p in search_paths:
             if p.exists():

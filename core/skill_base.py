@@ -1,11 +1,11 @@
-"""工具基类及其注册"""
+"""Skill base class and registry for LocalAgent."""
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type
 from langchain_core.tools import BaseTool
 
 
-class LocalAgentTool(ABC):
-    """工具基类"""
+class OpenClawSkill(ABC):
+    """Base class for all LocalAgent skills."""
 
     name: str = ""
     description: str = ""
@@ -25,43 +25,43 @@ class LocalAgentTool(ABC):
         pass
 
 
-class ToolRegistry:
-    """ 注册工具 """
+class SkillRegistry:
+    """Registry for managing LocalAgent skills."""
 
     def __init__(self):
-        self._tools: Dict[str, LocalAgentTool] = {}
+        self._skills: Dict[str, OpenClawSkill] = {}
 
-    def register(self, tool: LocalAgentTool) -> None:
+    def register(self, skill: OpenClawSkill) -> None:
         """Register a skill instance."""
-        self._tools[tool.name] = tool
-        tool.on_load()
+        self._skills[skill.name] = skill
+        skill.on_load()
 
     def unregister(self, name: str) -> None:
         """Unregister a skill by name."""
-        if name in self._tools:
-            self._tools[name].on_unload()
-            del self._tools[name]
+        if name in self._skills:
+            self._skills[name].on_unload()
+            del self._skills[name]
 
     def get_all_tools(self) -> List[BaseTool]:
-        """Get all tools from all registered tools."""
+        """Get all tools from all registered skills."""
         tools = []
-        for skill in self._tools.values():
+        for skill in self._skills.values():
             tools.extend(skill.get_tools())
         return tools
 
-    def list_tools(self) -> List[Dict[str, str]]:
-        """List all registered tools with metadata."""
+    def list_skills(self) -> List[Dict[str, str]]:
+        """List all registered skills with metadata."""
         return [
             {"name": s.name, "description": s.description, "version": s.version}
-            for s in self._tools.values()
+            for s in self._skills.values()
         ]
 
     def __contains__(self, name: str) -> bool:
-        return name in self._tools
+        return name in self._skills
 
 
-_registry = ToolRegistry()
+_registry = SkillRegistry()
 
 
-def get_registry() -> ToolRegistry:
+def get_registry() -> SkillRegistry:
     return _registry

@@ -27,6 +27,11 @@ class ListDirInput(BaseModel):
     path: str = Field(default=".", description="Directory path to list")
 
 
+class MakeDirInput(BaseModel):
+    path: str = Field(description="Path to the file to read")
+    name: str = Field(description="Name of directory")
+
+
 class _ReadFileTool(BaseTool):
     name: str = "file_read"
     description: str = "Read the contents of a local file. Returns the file content as text."
@@ -95,10 +100,27 @@ class _ListDirTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
+class _MakeDirTool(BaseTool):
+    name: str = "make_dir"
+    description: str = "Make local directories in a given path."
+    args_schema: Type[BaseModel] = MakeDirInput
+
+    def _run(self, path: str, name: str):
+        try:
+            p = Path(os.path.join(path, name))
+            p.parent.mkdir(parents=True, exist_ok=True)
+            return f"Successfully make directory {path})"
+        except Exception as e:
+            return f"Error writing {path}: {e}"
+
+    async def _arun(self, *args, **kwargs) -> str:
+        return self._run(*args, **kwargs)
+
+
 class FileOpsTool(LocalAgentTool):
     name = "file_ops"
-    description = "Read, write, and list local files"
+    description = "Read, write, list local files and make new directories."
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
-        return [_ReadFileTool(), _WriteFileTool(), _ListDirTool()]
+        return [_ReadFileTool(), _WriteFileTool(), _ListDirTool(), _MakeDirTool()]

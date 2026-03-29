@@ -1,4 +1,4 @@
-# 🦞 OpenClaw
+# 🤖 LocalAgent
 
 > A local AI agent powered by **Ollama** + **LangGraph**, with a modular skill system.
 
@@ -8,13 +8,13 @@
 
 - 🤖 **LangGraph ReAct agent** — structured tool-calling with full conversation memory
 - 🦙 **Ollama backend** — 100% local, no API keys, works with any pulled model
-- 🔌 **Modular skills** — drop a `skill.py` into `skills/` and it's auto-loaded
-- 🌐 **Browser skill** — fetch and parse any web page
+- 🔌 **Modular tools** — drop a `tool.py` into `tools/` and it's auto-loaded
+- 🌐 **Browser ability** — fetch and parse any web page
 - 🔍 **Web search** — DuckDuckGo search, no key required
 - 🐍 **Code execution** — run Python scripts as subprocesses with timeout protection
 - 📁 **File ops** — read, write, list local files
 - 🖥️ **Rich terminal UI** — beautiful interactive REPL with markdown rendering
-- ⚙️ **YAML config** — model, skills, timeouts all configurable
+- ⚙️ **YAML config** — model, tools, timeouts all configurable
 
 ---
 
@@ -67,7 +67,7 @@ ollama:
   base_url: "http://localhost:11434"
   temperature: 0.1
 
-skills:
+tools:
   - browser
   - code_exec
   - web_search
@@ -89,22 +89,22 @@ OLLAMA_BASE_URL=http://remote:11434 python main.py
 | Command | Description |
 |---------|-------------|
 | `/help` | Show available commands |
-| `/skills` | List loaded skills and tools |
+| `/tools` | List loaded tools |
 | `/clear` | Clear conversation history |
 | `/model` | Show current model info |
 | `/exit` | Quit |
 
 ---
 
-## Adding Custom Skills
+## Adding Custom tools
 
-1. Create `skills/my_skill/skill.py`:
+1. Create `tools/my_tool/tool.py`:
 
 ```python
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
-from core.tool_base import OpenClawSkill
+from core.tool_base import LocalAgentTool
 
 
 class MyInput(BaseModel):
@@ -123,18 +123,18 @@ class MyTool(BaseTool):
         return self._run(*args, **kwargs)
 
 
-class MySkill(OpenClawSkill):
-    name = "my_skill"
-    description = "My custom skill"
+class MyTool(LocalAgentTool):
+    name = "my_Tool"
+    description = "My custom Tool"
     version = "1.0.0"
 
     def get_tools(self) -> List[BaseTool]:
         return [MyTool()]
 ```
 
-2. Add `"my_skill"` to `skills:` in `config/config.yaml`
+2. Add `"my_Tool"` to `tools:` in `config/config.yaml`
 
-See `skills/README.md` for full documentation.
+See `tools/README.md` for full documentation.
 
 ---
 
@@ -153,13 +153,13 @@ openclaw/
 │   └── skill_loader.py      # Dynamic skill loader
 ├── ui/
 │   └── cli.py               # Rich terminal UI
-└── skills/
-    ├── README.md            # How to write skills
-    ├── browser/             # Web fetch skill
-    ├── code_exec/           # Python execution skill
-    ├── web_search/          # DuckDuckGo skill
-    ├── file_ops/            # File I/O skill
-    └── calculator/          # Example custom skill
+└── tools/
+    ├── README.md            # How to write tools
+    ├── browser/             # Web fetch tool
+    ├── code_exec/           # Python execution tool
+    ├── web_search/          # DuckDuckGo tool
+    ├── file_ops/            # File I/O tool
+    └── calculator/          # Example custom tool
 ```
 
 ---

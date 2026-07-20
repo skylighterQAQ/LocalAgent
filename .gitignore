@@ -1,0 +1,58 @@
+# Python bytecode, test, and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments and local runtime state
+.venv/
+venv/
+env/
+ENV/
+.local_agent/
+
+# Logs, debug output, and temporary/intermediate files
+*.log
+*.log.*
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.pid
+*.seed
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+debug_output.txt
+terminal_output.txt
+
+# Node / frontend generated files
+node_modules/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.code-workspace
+
+# Local secrets (keep the committed template)
+.env
+.env.*
+!.env.example

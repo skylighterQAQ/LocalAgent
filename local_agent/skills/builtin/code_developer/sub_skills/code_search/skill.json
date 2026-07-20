@@ -1,0 +1,66 @@
+{
+  "skill_name": "code_search",
+  "version": "1.0.0",
+  "description": "Code location skill. Performs semantic search, symbol search, reference search, call chain search, and impact search to find relevant files and code locations for a given task.",
+  "overview": "代码搜索 Skill，定位与任务相关的代码文件、符号、引用链路，输出候选文件列表。",
+  "is_sub_skill": true,
+  "skill_prompt": "你是代码搜索专家，能精准定位与任务相关的代码位置。\n\n## 搜索原则\n1. 语义优先：从任务描述提取关键词，不要仅搜索字面量\n2. 全面覆盖：同时搜索定义、调用、引用、测试\n3. 关联分析：理解文件间的关联，不只是孤立文件\n4. 输出精准：给出文件路径、关键行号、相关性说明\n",
+  "available_tools": [
+    "fs_grep",
+    "fs_search_files",
+    "fs_read_file",
+    "project_tree",
+    "fs_list_dir",
+    "fs_write_file"
+  ],
+  "input_spec": {
+    "task": "string - 需要定位代码的任务描述"
+  },
+  "output_spec": {
+    "result": "string - 候选文件列表和相关代码位置"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "关键词提取与搜索",
+      "type": "agent",
+      "description": "从任务描述提取搜索关键词，执行多维度代码搜索",
+      "tools": ["fs_grep", "fs_search_files", "fs_read_file", "project_tree", "fs_list_dir"],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"search_results": "result"},
+      "input_spec": {"task": "string - 任务描述"},
+      "output_spec": {"search_results": "string - 搜索结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "从任务描述中提取关键词（函数名、类名、变量名、业务术语），\n使用 fs_grep 和 fs_search_files 进行多维度搜索：\n1. 搜索定义（函数定义、类定义）\n2. 搜索调用方（谁调用了这个功能）\n3. 搜索测试文件\n4. 搜索配置文件\n\n输出 result=<找到的文件列表，含路径和相关行号>\n"
+    },
+    {
+      "id": "step_2",
+      "name": "影响文件确认",
+      "type": "agent",
+      "description": "读取候选文件，确认相关性，整理最终候选文件列表",
+      "tools": ["fs_read_file", "fs_grep", "fs_write_file"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "search_results": "search_results"
+      },
+      "output_mapping": {"result": "result"},
+      "input_spec": {
+        "task": "string - 任务描述",
+        "search_results": "string - 初步搜索结果"
+      },
+      "output_spec": {"result": "string - 最终候选文件列表（含路径、职责说明、修改建议）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "读取搜索结果中的候选文件，评估每个文件与任务的相关性。\n输出最终候选文件列表，格式：\n文件路径 | 职责说明 | 与任务的相关性 | 预计修改位置\n\n输出 result=<整理后的候选文件列表>\n"
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

@@ -1,0 +1,217 @@
+{
+  "skill_name": "greenfield_developer",
+  "version": "2.5.0",
+  "description": "Build a complete software project from scratch (0→1). Follows a strict Design-First methodology: first produces design/plan.md (system modules, tech stack, module responsibilities) and requirements.md (third-party dependencies), then parses plan.md to extract modules, generates ALL module design docs first, then implements code module by module.",
+  "overview": "从零构建完整软件项目，设计优先：先生成 design/plan.md 和 requirements.md，再解析 plan.md 中的模块列表，先批量生成所有模块的 design 文档，再逐模块生成代码。",
+  "is_sub_skill": false,
+  "skill_prompt": "你是顶级软件工程团队的主导 Agent，负责将一个 Idea 转化为可运行的生产就绪系统。\n\n## 全局工程原则\n1. Design Before Coding：必须在所有模块的 design 文档都生成完毕后，才允许开始写代码\n2. All Designs First：先为所有模块生成 design/{module_name}_design.md，再逐模块实现代码\n3. Module by Module：按模块顺序逐一开发代码，不并行实现\n4. File by File within Module：每个模块内按文件粒度逐一实现（由 module_developer 负责）\n5. 调用 module_developer 时，只传入该模块的设计要求，不传入其他模块信息\n6. 所有代码必须写入工作空间文件，不允许只打印代码\n7. 工具调用后需解析并确认执行结果，再进行下一步\n\n## 产出物清单\n- design/plan.md：系统整体设计（模块划分、技术选型、模块间依赖）\n- requirements.md（与 design/ 同级）：所有三方库依赖\n- design/{module_name}_design.md：每个模块的详细设计（在写代码前全部生成）\n- 各模块代码文件\n\n## 禁止行为\n- 禁止跳过系统设计直接写代码\n- 禁止在所有模块 design 文档生成完毕前开始写代码\n- 禁止在调用 module_developer 时传入整个系统的所有模块信息（只传当前模块）\n- 禁止在测试未通过时声称完成\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_write_file",
+    "fs_list_dir",
+    "fs_search_files",
+    "fs_create_dir",
+    "fs_grep",
+    "project_scaffold",
+    "project_install_deps",
+    "project_run_command",
+    "project_tree",
+    "project_read_config",
+    "code_execute_python",
+    "code_execute_python_inline",
+    "code_execute_js",
+    "code_execute_shell",
+    "code_execute_go",
+    "code_execute_generic",
+    "code_run_file",
+    "code_lint_multi",
+    "code_format",
+    "code_run_tests",
+    "repl_eval",
+    "git_init",
+    "git_status",
+    "git_add",
+    "git_commit",
+    "git_log",
+    "git_diff",
+    "shell_run",
+    "shell_which",
+    "search_web",
+    "invoke_skill"
+  ],
+  "input_spec": {
+    "task": "string - 项目需求描述，可以是一个 Idea、功能描述或产品方向"
+  },
+  "output_spec": {
+    "result": "string - 项目交付汇报：已实现模块列表、文件清单、验证结果、文档路径"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_0_setup",
+      "name": "初始化设计文件结构",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：创建 design/ 目录、plan.md 占位文件、requirements.md 占位文件",
+      "tools": ["fs_create_dir", "fs_write_file", "fs_write_file"],
+      "tool_params": [
+        {"path": "design"},
+        {"path": "design/plan.md", "content": "# 系统设计文档\n\n（待填充）\n"},
+        {"path": "requirements.md", "content": "# 依赖清单\n\n（待填充）\n"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {},
+      "output_mapping": {"scaffold_result": "result"},
+      "input_spec": {},
+      "output_spec": {"scaffold_result": "string - 已创建的文件路径列表"},
+      "input_validation_policy": "ignore",
+      "output_validation_policy": "ignore",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_1",
+      "name": "系统设计（Design）- 生成 plan.md 内容",
+      "type": "llm",
+      "description": "根据用户需求，由 LLM 生成 design/plan.md 的完整 Markdown 内容，不调用任何工具，只输出文本",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"plan_content": "plan_content"},
+      "input_spec": {"task": "string - 项目需求描述"},
+      "output_spec": {"plan_content": "string - design/plan.md 的完整 Markdown 内容"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "你的唯一任务是根据用户需求生成 design/plan.md 的完整 Markdown 内容。\n\n⚠️ 【严格禁止调用任何工具】只需输出文本内容，不调用任何工具。\n\n⚠️ 【输出格式】\n直接输出纯 Markdown 文本，不要有任何 JSON 包装、不要有额外说明文字，不要用代码块包裹。\n输出内容即 plan.md 文件的完整内容，第一行即为 Markdown 标题。\n\nplan.md 内容要求（每个章节都要充分展开，不得简略带过）：\n  - ## 1. 项目概述与目标（背景、功能范围、约束）\n  - ## 2. 系统架构概览（架构图、设计原则、数据流）\n  - ## 3. 模块清单与详细说明（每模块：名称 module_name、语言、职责、接口、内部逻辑、依赖、文件列表、错误处理）\n  - ## 4. 模块间依赖关系图\n  - ## 5. 技术选型说明\n  - ## 6. 模块实现顺序\n  - ## 7. 跨模块接口约定\n"
+    },
+    {
+      "id": "step_1_write",
+      "name": "写入 plan.md 文件",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：将上一步 LLM 生成的 plan_content 写入 design/plan.md 文件",
+      "tools": ["fs_write_file"],
+      "tool_params": [
+        {"path": "design/plan.md", "content": "{plan_content}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"plan_content": "plan_content"},
+      "output_mapping": {"plan_write_result": "result"},
+      "input_spec": {"plan_content": "string - plan.md 的完整文件内容"},
+      "output_spec": {"plan_write_result": "string - 文件写入结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "ignore",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_1b",
+      "name": "生成 requirements.md 内容",
+      "type": "llm",
+      "description": "根据系统设计内容生成完整的第三方库依赖清单文本，不调用任何工具，只输出文本内容",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "plan_content": "plan_content"
+      },
+      "output_mapping": {"requirements_content": "requirements_content"},
+      "input_spec": {
+        "task": "string - 项目需求描述",
+        "plan_content": "string - design/plan.md 的完整文本内容（已在上下文中提供）"
+      },
+      "output_spec": {"requirements_content": "string - requirements.md 的完整文件内容，包含所有三方库依赖（按模块分组，每个库注明用途、版本、安装命令）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "你的唯一任务是根据 plan.md 的内容，生成 requirements.md 的完整文件文本。\n\n⚠️ 【严格禁止调用任何工具】只需输出文本内容，不调用任何工具。\n\nplan.md 的内容已在 [plan_content] 输入中直接提供，请直接从中提取所需的第三方库信息。\n\n⚠️ 【输出格式】\n直接输出纯 Markdown 文本，不要有任何 JSON 包装、不要有额外说明文字，不要用代码块包裹。\n输出内容即 requirements.md 文件的完整内容，第一行即为 Markdown 标题。\n\nrequirements.md 内容要求：\n  - 按模块分组，每组一个 ## 标题\n  - 每个依赖库列出：库名、版本（尽量精确）、用途说明、pip install 安装命令\n  - 示例格式：\n    ## 数据获取模块\n    - python-binance==1.0.19：币安API客户端，用于获取市场数据\n"
+    },
+    {
+      "id": "step_1c",
+      "name": "写入 requirements.md 文件",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：将上一步 LLM 生成的 requirements 内容写入 requirements.md 文件",
+      "tools": ["fs_write_file"],
+      "tool_params": [
+        {"path": "requirements.md", "content": "{requirements_content}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"requirements_content": "requirements_content"},
+      "output_mapping": {"requirements_write_result": "result"},
+      "input_spec": {"requirements_content": "string - requirements.md 的完整文件内容"},
+      "output_spec": {"requirements_write_result": "string - 文件写入结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "ignore",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_2",
+      "name": "解析模块列表",
+      "type": "llm",
+      "description": "从 plan.md 内容中解析出所有模块的名称、语言、职责、接口、依赖和技术选型，输出结构化的模块清单（JSON 格式）",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "plan_content": "plan_content"
+      },
+      "output_mapping": {"module_list": "module_list"},
+      "input_spec": {
+        "task": "string - 项目需求描述",
+        "plan_content": "string - design/plan.md 的完整文本内容（已在上下文中提供）"
+      },
+      "output_spec": {"module_list": "string - 模块清单 JSON，格式：[{\"module_name\":\"...\",\"language\":\"...\",\"description\":\"...\",\"interfaces\":\"...\",\"dependencies\":\"...\",\"tech_stack\":\"...\"}]（按实现顺序排列）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "你的唯一任务是从下方已提供的 plan.md 文件内容中提取结构化的模块清单，不要调用任何工具，不要做任何代码实现。\n\nplan.md 的内容已经在 [plan_content] 输入中直接提供，请直接从中提取信息。\n\n【提取字段】\n对每个模块整理以下字段：\n   - module_name（模块名称，使用 snake_case 格式，如 data_collector、trading_engine）\n   - language（编程语言）\n   - description（职责描述）\n   - interfaces（对外接口描述）\n   - dependencies（依赖的其他模块，无则写\"无\"）\n   - tech_stack（该模块相关技术选型）\n\n【输出格式】\n直接输出以下格式的结果（不要输出其他内容）：\nmodule_list=<JSON 数组字符串>\n\n例如：\nmodule_list=[{\"module_name\":\"data_collector\",\"language\":\"Python\",\"description\":\"从币安API获取实时市场数据\",\"interfaces\":\"提供市场数据接口\",\"dependencies\":\"无\",\"tech_stack\":\"python-binance\"}]\n\n注意：JSON 中的引号必须转义，整个 module_list 值是一个 JSON 数组字符串，不要换行。\n"
+    },
+    {
+      "id": "step_2_5",
+      "name": "批量生成所有模块 Design 文档",
+      "type": "agent",
+      "description": "根据 module_list，为每个模块生成详细的 design/{module_name}_design.md 文档（仅设计，不写代码）。所有模块的 design 文档全部生成完毕后，再进入代码实现阶段。",
+      "tools": ["invoke_skill"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "module_list": "module_list"
+      },
+      "output_mapping": {"all_designs": "result"},
+      "input_spec": {
+        "task": "string - 项目需求描述",
+        "module_list": "string - 模块清单 JSON 数组字符串"
+      },
+      "output_spec": {"all_designs": "string - 已生成 design 文档的所有模块列表"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "你的任务是根据 module_list 中的模块清单，为每个模块生成详细的 design 文档。\n\n⚠️ 【重要】本步骤只生成 design 文档，不生成任何代码。代码实现在后续步骤完成。\n\n⚠️ 【严格禁止：调用错误的 skill】\n调用 invoke_skill 时，skill_name 只能是 \"module_developer\"，绝对禁止传入 \"greenfield_developer\" 或任何其他 skill 名称。\n如果传入 \"greenfield_developer\"，系统会直接拒绝并返回错误，请务必使用正确的 \"module_developer\"。\n\n【解析 module_list】\n将 module_list 解析为模块列表（JSON 数组）。\n\n【逐模块生成 design 文档】\n按照列表中的模块顺序，对每个模块调用 invoke_skill：\n- skill_name: \"module_developer\"  ← 必须是这个，不能是 greenfield_developer\n- task: 仅包含当前模块信息的字符串，格式：\n  模块名：<module_name>\n  编程语言：<language>\n  职责：<description>\n  对外接口：<interfaces>\n  依赖模块：<dependencies>\n  技术选型：<tech_stack>\n  设计文档路径：design/<module_name>_design.md\n  执行模式：design_only（仅生成设计文档，不实现代码）\n\n注意：module_developer 接收到 \"执行模式：design_only\" 后，只会生成 design 文档（step_1~step_3），跳过代码实现（step_4）。\n\n【约束】\n- 每次调用 invoke_skill 时，task 只包含当前模块的信息\n- 必须等待当前模块的 design 文档生成完成后，再处理下一个模块\n- 如果某个模块调用失败，记录错误后继续处理下一个模块\n\n【最终输出】\n所有模块 design 文档生成完后，输出：\nresult=已生成 design 文档的模块：\n<每个模块名，每行一个>\n"
+    },
+    {
+      "id": "step_3",
+      "name": "逐模块实现代码",
+      "type": "agent",
+      "description": "所有模块 design 文档已预先生成，按顺序逐个调用 module_developer 实现每个模块的代码。module_developer 会检测到 design 文档已存在，直接进入代码实现阶段。",
+      "tools": ["invoke_skill"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "module_list": "module_list"
+      },
+      "output_mapping": {"implemented_modules": "result"},
+      "input_spec": {
+        "task": "string - 项目需求描述",
+        "module_list": "string - step_2 输出的模块清单（JSON 数组字符串）"
+      },
+      "output_spec": {"implemented_modules": "string - 已实现的所有模块及文件列表"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "你的任务是根据 module_list 中的模块清单，按顺序逐个调用 module_developer 来实现每个模块的代码。\n\n⚠️ 【重要提示】所有模块的 design 文档已在上一步生成完毕（存于 design/<module_name>_design.md）。module_developer 会检测到 design 文档已存在，跳过 design 阶段，直接进入代码实现。\n\n⚠️ 【严格禁止：调用错误的 skill】\n调用 invoke_skill 时，skill_name 只能是 \"module_developer\"，绝对禁止传入 \"greenfield_developer\" 或任何其他 skill 名称。\n如果传入 \"greenfield_developer\"，系统会直接拒绝并返回错误，请务必使用正确的 \"module_developer\"。\n\n【解析 module_list】\n将 module_list 解析为模块列表（JSON 数组）。\n\n【逐模块调用 module_developer】\n按照列表中的模块顺序，对每个模块调用 invoke_skill，参数如下：\n- skill_name: \"module_developer\"  ← 必须是这个，不能是 greenfield_developer\n- task: 仅包含当前模块信息的字符串，格式：\n  模块名：<module_name>\n  编程语言：<language>\n  职责：<description>\n  对外接口：<interfaces>\n  依赖模块：<dependencies>\n  技术选型：<tech_stack>\n  设计文档路径：design/<module_name>_design.md\n\n【约束】\n- 每次调用 invoke_skill 时，task 只包含当前模块的信息，绝对不要把所有模块信息都传入\n- 必须等待当前模块的 invoke_skill 返回结果后，再处理下一个模块\n- 如果某个模块调用失败，记录错误后继续处理下一个模块（不要中止整个流程）\n- 记录每个模块的调用结果（成功/失败）\n\n【最终输出】\n所有模块处理完后，输出以下格式的文字汇报：\nresult=已实现模块：\n<每个模块名，每行一个>\n"
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

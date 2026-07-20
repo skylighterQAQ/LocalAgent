@@ -1,0 +1,217 @@
+{
+  "skill_name": "web_researcher",
+  "version": "1.1.0",
+  "description": "Professional internet research skill: searches the web, fetches page content, cross-validates multiple sources, and produces structured research summaries with citations.",
+  "overview": "专业网络信息检索与整合 skill，通过多渠道搜索、页面访问、多源验证，输出带引用的结构化研究报告。",
+  "skill_prompt": "你是专业的网络信息研究员，执行系统性信息检索与综合分析任务。\n\n## 全局规则（每步均适用）\n1. 必须主动调用搜索工具获取信息，不依赖训练数据猜测\n2. 重要信息至少交叉验证 2 个来源\n3. 回答中必须标注信息来源 URL\n4. 无法验证的信息明确标注\"需进一步确认\"\n5. 通过 url_accessor skill（invoke_skill）读取页面内容，非直接 fetch_url\n6. 获取工具结果后必须解析确认内容，不直接把原始数据传入下步\n7. 【重要】搜索后必须逐一访问所有筛选出的 URL：每次只调用一个 invoke_skill，获得结果后立即调用下一个 URL，直到所有 URL 都已访问完毕，才能输出最终总结。在所有 URL 访问完之前，严禁输出最终答案。\n",
+  "available_tools": [
+    "search_web",
+    "search_news",
+    "search_wikipedia",
+    "search_arxiv",
+    "fetch_url",
+    "browser_get_text",
+    "browser_extract_links",
+    "fs_write_file",
+    "memory_save"
+  ],
+  "input_spec": {
+    "query": "string - 用户的研究查询字符串（必须非空）"
+  },
+  "output_spec": {
+    "report": "string - 结构化研究报告，含摘要、详细发现和来源引用"
+  },
+  "on_input_mismatch": "raise",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "分析查询意图",
+      "type": "llm",
+      "description": "理解用户信息需求，输出搜索关键词和数据源选择策略",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {"query": "query"},
+      "output_mapping": {
+        "search_keywords": "search_keywords",
+        "search_strategy": "search_strategy"
+      },
+      "input_spec": {
+        "query": "string - 用户原始查询（必须非空）"
+      },
+      "output_spec": {
+        "search_keywords": "string - 搜索关键词列表（逗号分隔或 JSON 数组）",
+        "search_strategy": "string - 搜索策略说明（使用哪些工具、优先顺序）"
+      },
+      "input_validation_policy": "raise",
+      "output_validation_policy": "raise",
+      "on_failure": "raise",
+      "step_prompt": "理解用户信息需求，输出搜索关键词和数据源选择策略。\n关键词应覆盖用户问题的核心概念，中英文各准备。\n策略中需说明：优先使用哪个搜索工具（search_web/search_news/search_wikipedia/search_arxiv），以及为什么。\n输出格式：search_keywords=<关键词列表>, search_strategy=<策略说明>\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_2",
+      "name": "执行初始搜索",
+      "type": "agent",
+      "description": "使用搜索工具检索相关内容，优先最新信息",
+      "tools": ["search_web", "search_news", "search_wikipedia", "search_arxiv"],
+      "nested_skill": null,
+      "input_mapping": {
+        "search_keywords": "search_keywords",
+        "query": "query"
+      },
+      "output_mapping": {
+        "search_results": "search_results"
+      },
+      "input_spec": {
+        "search_keywords": "string - 搜索关键词",
+        "query": "string - 原始查询"
+      },
+      "output_spec": {
+        "search_results": "string - 搜索结果列表（含标题/URL/摘要，JSON格式）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "retry:2",
+      "step_prompt": "使用搜索工具检索相关内容，优先最新信息（近一年）。\n按策略顺序调用工具。search_web 自动应用时间过滤，无需手动添加年份。\n调用工具后，解析返回的搜索结果条目（标题、URL、摘要），整理为 JSON 列表写入 search_results。\n至少获取 5 条有效结果。\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_3",
+      "name": "筛选高质量结果",
+      "type": "llm",
+      "description": "从搜索结果中挑选 3-5 个最相关、最可信的来源 URL",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {
+        "search_results": "search_results",
+        "query": "query"
+      },
+      "output_mapping": {
+        "filtered_urls": "filtered_urls"
+      },
+      "input_spec": {
+        "search_results": "string - 搜索结果列表",
+        "query": "string - 原始查询"
+      },
+      "output_spec": {
+        "filtered_urls": "string - 筛选后的 URL 列表（JSON 数组格式，3-5 个高质量 URL）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "从搜索结果中挑选 3-5 个最相关、最可信的来源。\n优先官方文档、知名媒体、学术来源；排除广告页、低质量内容。\n输出格式：filtered_urls=[\"url1\",\"url2\",\"url3\"]\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_4",
+      "name": "精读页面内容",
+      "type": "skill",
+      "description": "对筛选出的 URL 调用 url_accessor skill 获取完整内容",
+      "tools": [],
+      "nested_skill": "url_accessor",
+      "input_mapping": {
+        "filtered_urls": "filtered_urls",
+        "query": "query"
+      },
+      "output_mapping": {
+        "page_contents": "page_contents"
+      },
+      "input_spec": {
+        "filtered_urls": "string - 待访问的 URL 列表",
+        "query": "string - 原始查询"
+      },
+      "output_spec": {
+        "page_contents": "string - 各页面结构化内容（访问状态/标题/正文摘要）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "对每个筛选出的 URL 并行且独立地调用 url_accessor skill 获取完整内容。每次调用相互隔离，不传入其他 URL 的访问结果。所有 URL 访问完成后，将各页面结果汇总到 page_contents。\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_5",
+      "name": "相关性过滤",
+      "type": "llm",
+      "description": "针对每个页面内容，根据 query 做相关性筛选，提取相关片段",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {
+        "page_contents": "page_contents",
+        "query": "query"
+      },
+      "output_mapping": {
+        "relevant_excerpts": "relevant_excerpts"
+      },
+      "input_spec": {
+        "page_contents": "string - 各页面内容",
+        "query": "string - 原始查询"
+      },
+      "output_spec": {
+        "relevant_excerpts": "string - 每个 URL 的相关片段列表或\"不相关-跳过\"标注"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "针对每个页面内容，根据用户 query 做相关性筛选。\n仅保留与查询意图直接相关的段落、数据点、引用；丢弃导航栏、广告、无关内容。\n每个 URL 输出 3-10 条相关片段，或标记\"不相关-跳过\"。\n输出格式：relevant_excerpts={\"url1\": [\"片段1\",\"片段2\"], \"url2\": \"不相关-跳过\"}\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_6",
+      "name": "交叉验证",
+      "type": "agent",
+      "description": "对比多个来源，识别一致性与差异，对重要信息额外验证",
+      "tools": ["search_web"],
+      "nested_skill": null,
+      "input_mapping": {
+        "relevant_excerpts": "relevant_excerpts",
+        "query": "query"
+      },
+      "output_mapping": {
+        "verified_info": "verified_info"
+      },
+      "input_spec": {
+        "relevant_excerpts": "string - 过滤后的相关片段",
+        "query": "string - 原始查询"
+      },
+      "output_spec": {
+        "verified_info": "string - 已验证信息（JSON：verified列表 + unverified列表）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "对比多个来源的关键信息，识别一致性与差异。\n对重要但存疑的信息，调用 search_web 进行额外验证搜索。\n输出格式：verified_info={\"verified\": [\"已确认信息1\",...], \"unverified\": [\"存疑信息1\",...]}\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_7",
+      "name": "整理输出报告",
+      "type": "agent",
+      "description": "将研究结果整理为结构化 Markdown 报告，可选保存到文件",
+      "tools": ["fs_write_file", "memory_save"],
+      "nested_skill": null,
+      "input_mapping": {
+        "verified_info": "verified_info",
+        "query": "query"
+      },
+      "output_mapping": {
+        "report": "report"
+      },
+      "input_spec": {
+        "verified_info": "string - 已验证信息",
+        "query": "string - 原始查询"
+      },
+      "output_spec": {
+        "report": "string - 结构化研究报告（Markdown 格式，含摘要/详细发现/来源引用）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "将研究结果整理为结构化 Markdown 报告。\n报告格式：1) 执行摘要（3-5句）；2) 详细发现（按主题分小节）；3) 来源引用列表。\n用户要求保存时调用 fs_write_file；重要信息可调用 memory_save 存储。\n最终把完整报告文本写入 report 字段。\n",
+      "system_prompt": null
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

@@ -1,0 +1,168 @@
+{
+  "skill_name": "file_manager",
+  "version": "1.1.0",
+  "description": "Professional local filesystem management: read, write, search, organize, move, copy, and delete files and directories. Handles batch file operations and content search.",
+  "overview": "本地文件系统管理 skill，负责读取、写入、搜索、组织、移动、删除本地文件和目录，支持批量文件操作。",
+  "skill_prompt": "你是专业的文件系统管理助手，执行精确安全的文件操作。\n\n## 全局规则（每步均适用）\n1. 删除操作前必须向用户展示将要删除的内容并请求确认\n2. 批量操作前后展示目录结构，让用户了解变化\n3. 使用绝对路径或明确的相对路径，避免路径歧义\n4. 遇到批量删除或覆盖操作时，提示用户备份重要文件\n5. 每个操作都告知用户正在进行什么，不静默执行大量变更\n6. 调用工具后解析返回结果，确认操作是否成功\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_write_file",
+    "fs_list_dir",
+    "fs_search_files",
+    "fs_create_dir",
+    "fs_delete_file",
+    "fs_move_file",
+    "fs_copy_file",
+    "fs_get_file_info",
+    "fs_grep",
+    "shell_run"
+  ],
+  "input_spec": {
+    "task": "string - 文件操作任务描述（必须非空）",
+    "path": "string - （可选）目标文件或目录路径"
+  },
+  "output_spec": {
+    "result": "string - 操作结果说明和最终状态"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "理解需求",
+      "type": "llm",
+      "description": "明确文件操作的核心信息：操作类型、目标路径、是否需要用户确认",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {
+        "operation_type": "operation_type",
+        "target_paths": "target_paths",
+        "needs_confirmation": "needs_confirmation"
+      },
+      "input_spec": {
+        "task": "string - 用户的文件操作请求（必须非空）"
+      },
+      "output_spec": {
+        "operation_type": "string - 操作类型（read/write/move/delete/search/organize）",
+        "target_paths": "string - 目标文件或目录路径列表",
+        "needs_confirmation": "string - 是否需要用户确认（yes/no）"
+      },
+      "input_validation_policy": "raise",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "明确文件操作的核心信息：操作类型（读/写/移动/删除/搜索/整理）、目标路径、是否需要用户确认。\n删除、覆盖、批量操作必须标记 needs_confirmation=yes。\n输出格式：operation_type=<类型>, target_paths=<路径列表>, needs_confirmation=yes|no\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_2",
+      "name": "探索目录结构",
+      "type": "agent",
+      "description": "调用 fs_list_dir 或 fs_get_file_info 获取目录/文件状态",
+      "tools": ["fs_list_dir", "fs_get_file_info", "shell_run"],
+      "nested_skill": null,
+      "input_mapping": {
+        "target_paths": "target_paths"
+      },
+      "output_mapping": {
+        "dir_structure": "dir_structure"
+      },
+      "input_spec": {
+        "target_paths": "string - 目标路径"
+      },
+      "output_spec": {
+        "dir_structure": "string - 目录结构概览（含文件数量、大小、修改时间等关键信息）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "调用 fs_list_dir 或 fs_get_file_info 获取目录/文件状态。\n解析返回结果，提取关键信息（文件名、大小、修改时间、类型）。\n将目录结构整理为易读的文本写入 dir_structure。\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_3",
+      "name": "执行搜索（按需）",
+      "type": "agent",
+      "description": "仅当任务包含搜索需求时执行，调用 fs_search_files 或 fs_grep",
+      "tools": ["fs_search_files", "fs_grep"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "target_paths": "target_paths"
+      },
+      "output_mapping": {
+        "matched_files": "matched_files"
+      },
+      "input_spec": {
+        "task": "string - 搜索需求",
+        "target_paths": "string - 搜索范围"
+      },
+      "output_spec": {
+        "matched_files": "string - 匹配的文件列表（路径 + 匹配原因）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "仅当任务包含搜索需求时执行此步骤，否则跳过。\n调用 fs_search_files（按文件名模式）或 fs_grep（按内容搜索）。\n解析搜索结果，列出匹配文件路径和原因，写入 matched_files。\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_4",
+      "name": "执行文件操作",
+      "type": "agent",
+      "description": "执行核心文件操作：读/写/移动/复制/删除/创建目录",
+      "tools": ["fs_read_file", "fs_write_file", "fs_move_file", "fs_copy_file", "fs_delete_file", "fs_create_dir", "shell_run"],
+      "nested_skill": null,
+      "input_mapping": {
+        "operation_type": "operation_type",
+        "target_paths": "target_paths",
+        "dir_structure": "dir_structure"
+      },
+      "output_mapping": {
+        "operation_result": "operation_result"
+      },
+      "input_spec": {
+        "operation_type": "string - 操作类型",
+        "target_paths": "string - 目标路径",
+        "dir_structure": "string - 目录概览（可选）"
+      },
+      "output_spec": {
+        "operation_result": "string - 操作结果（成功/失败 + 详情）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "raise",
+      "on_failure": "raise",
+      "step_prompt": "执行核心文件操作。重要规则：\n- 删除前：必须先展示将要删除的文件列表，明确说明需要确认\n- 写入前：检查文件是否存在，避免意外覆盖\n- 操作后：调用工具确认操作结果（如 fs_get_file_info 确认文件存在）\n将操作成功/失败情况和详情写入 operation_result。\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_5",
+      "name": "确认结果并汇报",
+      "type": "agent",
+      "description": "调用工具验证操作成功，获取文件/目录最新状态，整理完整汇报",
+      "tools": ["fs_list_dir", "fs_read_file", "fs_get_file_info"],
+      "nested_skill": null,
+      "input_mapping": {
+        "operation_result": "operation_result",
+        "target_paths": "target_paths"
+      },
+      "output_mapping": {
+        "result": "result"
+      },
+      "input_spec": {
+        "operation_result": "string - 操作结果",
+        "target_paths": "string - 目标路径"
+      },
+      "output_spec": {
+        "result": "string - 完整操作摘要（执行了什么、文件新状态、后续建议）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "调用工具验证操作成功，获取文件/目录最新状态。\n整理完整汇报：本次执行了哪些操作、各文件的新状态、是否有注意事项。\n将汇报文本写入 result 字段。\n",
+      "system_prompt": null
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

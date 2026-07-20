@@ -1,0 +1,89 @@
+{
+  "skill_name": "project_understanding",
+  "version": "1.1.0",
+  "description": "Understand an existing codebase. Analyzes repository structure, module dependencies, call graphs, tech stack, coding conventions, and runtime behavior. Produces a Project Map report.",
+  "overview": "项目理解 Skill，深度分析已有代码库的结构、依赖、技术栈，输出 Project Map 报告。",
+  "is_sub_skill": true,
+  "skill_prompt": "你是代码库分析专家，负责深度理解一个已有项目的全貌。\n\n## 分析原则\n1. 自顶向下：先看整体结构，再深入模块\n2. 追踪依赖：理解模块间的依赖关系图\n3. 识别模式：发现项目使用的架构模式和设计模式\n4. 技术栈：识别所有框架、库、工具的版本\n5. 编码规范：提取项目的命名、格式、注释规范\n6. 分析结果必须写入 PROJECT_MAP.md 文件\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_list_dir",
+    "fs_search_files",
+    "fs_grep",
+    "fs_write_file",
+    "fs_create_dir",
+    "project_tree",
+    "project_read_config",
+    "shell_run"
+  ],
+  "input_spec": {
+    "task": "string - 描述需要理解的项目和分析目的"
+  },
+  "output_spec": {
+    "result": "string - Project Map 报告内容摘要"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "项目扫描",
+      "type": "agent",
+      "description": "扫描项目目录结构、读取配置文件、识别技术栈",
+      "tools": ["fs_list_dir", "project_tree", "project_read_config", "fs_read_file", "shell_run"],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"project_structure": "result"},
+      "input_spec": {"task": "string - 分析目的"},
+      "output_spec": {"project_structure": "string - 项目目录结构和技术栈"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "使用 project_tree 和 fs_list_dir 扫描项目结构。\n读取 package.json/requirements.txt/go.mod/pom.xml 等配置文件识别技术栈。\n输出 result=<项目结构摘要，含目录树和技术栈列表>\n"
+    },
+    {
+      "id": "step_2",
+      "name": "依赖与模块分析 - 生成报告内容",
+      "type": "agent",
+      "description": "分析模块依赖关系、核心模块职责、编码规范，生成 PROJECT_MAP.md 的完整内容（不写文件）",
+      "tools": ["fs_read_file", "fs_grep", "fs_search_files"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "project_structure": "project_structure"
+      },
+      "output_mapping": {"project_map_content": "project_map_content"},
+      "input_spec": {
+        "task": "string - 分析目的",
+        "project_structure": "string - 项目结构摘要"
+      },
+      "output_spec": {"project_map_content": "string - PROJECT_MAP.md 的完整 Markdown 内容（将由下一步写入文件）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "基于项目结构，深入分析关键模块，生成 PROJECT_MAP.md 的完整内容。\n\n⚠️ 【本步骤禁止写文件】只需生成报告内容文本，文件写入由下一步骤完成。\n\n文档需包含：\n1. 项目概述（类型、规模、技术栈）\n2. 目录结构说明（每个目录的用途）\n3. 核心模块图（模块名、职责、依赖关系）\n4. 关键文件列表（入口、配置、核心业务逻辑）\n5. 编码规范（命名约定、文件组织规范）\n6. 对外接口（API 端点或公共 API）\n\n【输出格式】\n必须严格输出以下 JSON 格式（不要有其他任何文字）：\n{\"project_map_content\": \"<PROJECT_MAP.md 的完整 Markdown 内容>\"}\n\n注意：JSON 字符串中的换行用 \\n 表示，双引号用 \\\" 转义，确保输出是合法的 JSON。\n"
+    },
+    {
+      "id": "step_2_write",
+      "name": "写入 PROJECT_MAP.md",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：将上一步生成的 project_map_content 写入 PROJECT_MAP.md",
+      "tools": ["fs_create_dir", "fs_write_file"],
+      "tool_params": [
+        {"path": "."},
+        {"path": "PROJECT_MAP.md", "content": "{project_map_content}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"project_map_content": "project_map_content"},
+      "output_mapping": {"result": "result"},
+      "input_spec": {"project_map_content": "string - PROJECT_MAP.md 的完整 Markdown 内容"},
+      "output_spec": {"result": "string - 文件写入结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "ignore",
+      "on_failure": "raise",
+      "step_prompt": null
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

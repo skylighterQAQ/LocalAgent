@@ -1,0 +1,179 @@
+{
+  "skill_name": "greenfield_developer",
+  "version": "2.1.0",
+  "description": "Build a complete software project from scratch (0→1). Follows a strict Design-First methodology: first produces design/plan.md (system modules, tech stack, module responsibilities) and requirements.md (third-party dependencies), then parses plan.md to extract modules and invokes module_developer for each module one by one.",
+  "overview": "从零构建完整软件项目，设计优先：先生成 design/plan.md 和 requirements.md，再解析 plan.md 中的模块列表，逐模块生成 design 文档并实现代码。",
+  "is_sub_skill": false,
+  "skill_prompt": "你是顶级软件工程团队的主导 Agent，负责将一个 Idea 转化为可运行的生产就绪系统。\n\n## 全局工程原则\n1. Design Before Coding：必须在 design/plan.md 完成后才允许写代码\n2. Module by Module：按模块顺序逐一开发，不并行实现\n3. File by File within Module：每个模块内按文件粒度逐一实现（由 module_developer 负责）\n4. 调用 module_developer 时，只传入该模块的设计要求，不传入其他模块信息\n5. 所有代码必须写入工作空间文件，不允许只打印代码\n6. 工具调用后需解析并确认执行结果，再进行下一步\n\n## 产出物清单\n- design/plan.md：系统整体设计（模块划分、技术选型、模块间依赖）\n- requirements.md（与 design/ 同级）：所有三方库依赖\n- design/{module_name}_design.md：每个模块的详细设计（由 module_developer 生成）\n- 各模块代码文件\n\n## 禁止行为\n- 禁止跳过系统设计直接写代码\n- 禁止在调用 module_developer 时传入整个系统的所有模块信息（只传当前模块）\n- 禁止在测试未通过时声称完成\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_write_file",
+    "fs_list_dir",
+    "fs_search_files",
+    "fs_create_dir",
+    "fs_grep",
+    "project_scaffold",
+    "project_install_deps",
+    "project_run_command",
+    "project_tree",
+    "project_read_config",
+    "code_execute_python",
+    "code_execute_python_inline",
+    "code_execute_js",
+    "code_execute_shell",
+    "code_execute_go",
+    "code_execute_generic",
+    "code_run_file",
+    "code_lint_multi",
+    "code_format",
+    "code_run_tests",
+    "repl_eval",
+    "git_init",
+    "git_status",
+    "git_add",
+    "git_commit",
+    "git_log",
+    "git_diff",
+    "shell_run",
+    "shell_which",
+    "search_web"
+  ],
+  "input_spec": {
+    "task": "string - 项目需求描述，可以是一个 Idea、功能描述或产品方向"
+  },
+  "output_spec": {
+    "result": "string - 项目交付汇报：已实现模块列表、文件清单、验证结果、文档路径"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "系统设计（Design）",
+      "type": "agent",
+      "description": "根据用户需求，确定系统模块划分、技术选型、模块职责与依赖关系，生成 design/plan.md 和 requirements.md",
+      "tools": ["fs_read_file", "fs_write_file", "fs_create_dir", "project_tree", "search_web"],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"design_plan": "result"},
+      "input_spec": {"task": "string - 项目需求描述"},
+      "output_spec": {"design_plan": "string - design/plan.md 的完整文件路径（必须是绝对路径或可读取的相对路径）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "分析用户需求，完成系统设计并生成以下文件：\n\n【1】创建 design/ 目录，生成 design/plan.md，内容必须包含以下所有章节，每章节都要充分展开，不得简略带过：\n\n  ## 1. 项目概述与目标\n  - 项目背景、核心价值主张\n  - 功能范围（In-scope / Out-of-scope）\n  - 关键约束与非功能性需求（性能、安全、可扩展性等）\n\n  ## 2. 系统架构概览\n  - 整体架构图（用文字/ASCII 描述层次结构）\n  - 核心设计决策与原则（如：分层架构、事件驱动、微服务等）\n  - 关键数据流说明（请求如何从入口流转到各模块）\n\n  ## 3. 模块清单与详细说明\n  每个模块必须包含以下所有字段：\n  - 模块名称（module_name）：将作为代码目录名\n  - 编程语言与运行环境\n  - 职责描述（详细说明该模块负责什么，不负责什么）\n  - 对外暴露的接口（函数签名 / API 路由 / 消息格式，尽量具体）\n  - 内部核心逻辑说明（主要算法或业务规则的描述）\n  - 依赖的其他模块（说明依赖关系与调用方式）\n  - 预计包含的文件列表（估算文件数量和主要文件名）\n  - 错误处理策略（异常类型、重试机制、降级方案）\n\n  ## 4. 模块间依赖关系图\n  - 用文字或 ASCII 图表示模块间调用关系\n  - 标注同步/异步、强依赖/弱依赖\n  - 指出可能的循环依赖风险\n\n  ## 5. 技术选型说明\n  - 每个技术选型的理由（为什么选这个而不是替代方案）\n  - 框架版本与兼容性说明\n  - 数据库 schema 概述（如有）\n  - 中间件配置要点（如有）\n\n  ## 6. 模块实现顺序\n  - 按依赖关系排序，底层/无依赖模块在前\n  - 每个模块的预估工作量（文件数量）\n  - 关键里程碑节点\n\n  ## 7. 跨模块接口约定\n  - 模块间共用的数据结构定义（DTOs、接口类型）\n  - 错误码规范\n  - 日志格式约定\n  - 配置管理方式\n\n【2】在项目根目录（与 design/ 同级）生成 requirements.md，内容包含：\n  - 所有需要安装的三方库\n  - 每个库的用途说明和建议版本\n  - 安装命令（pip install / npm install 等）\n  - 按语言/模块分组\n\n注意：先用 fs_create_dir 确保目录存在，再写文件。\n完成后输出 result=<design/plan.md 的完整绝对路径>\n例如：result=/path/to/workspace/design/plan.md\n"
+    },
+    {
+      "id": "step_2",
+      "name": "解析模块列表并逐模块开发",
+      "type": "agent",
+      "description": "读取 design/plan.md，解析出所有模块信息，对每个模块提取其设计说明，逐个调用 module_developer sub_skill 生成 design 文档并实现代码",
+      "tools": ["fs_read_file", "fs_list_dir", "fs_create_dir"],
+      "nested_skill": "module_developer",
+      "input_mapping": {
+        "task": "task",
+        "design_plan": "design_plan"
+      },
+      "output_mapping": {"implemented_modules": "result"},
+      "input_spec": {
+        "task": "string - 项目需求描述",
+        "design_plan": "string - design/plan.md 的文件路径"
+      },
+      "output_spec": {"implemented_modules": "string - 已实现的所有模块及文件列表"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "你需要读取 design/plan.md，解析模块列表，然后逐模块调用 module_developer sub_skill 实现每个模块。\n\n【步骤一：读取 plan.md】\n使用 fs_read_file 读取 design_plan 变量指定的 plan.md 文件（或直接读取 design/plan.md），获取完整内容。\n\n【步骤二：解析模块列表】\n从 plan.md 中提取所有模块信息，对每个模块整理以下内容（这将作为 module_developer 的输入）：\n- 模块名称（module_name）\n- 编程语言\n- 模块职责描述\n- 对外暴露的接口\n- 依赖的其他模块\n- 该模块相关的技术选型\n\n【步骤三：逐模块调用 module_developer】\n按照 plan.md 中的实现顺序，对每个模块执行以下操作：\n\n  调用 module_developer sub_skill，task 输入格式如下（只包含当前模块信息）：\n  ```\n  模块名：<module_name>\n  编程语言：<language>\n  职责：<description>\n  对外接口：<interfaces>\n  依赖模块：<dependencies>\n  技术选型：<tech_stack>\n  设计文档路径：design/<module_name>_design.md\n  ```\n  - 等待该模块完成后，再处理下一个模块\n  - 记录每个模块的实现结果\n\n【重要约束】\n- 每次调用 module_developer 时，task 只包含当前模块的信息，绝对不要把所有模块的信息都传入\n- 必须先读取 plan.md 后再调用 module_developer，不能跳过读取步骤\n\n全部模块实现后，输出 result=已实现模块：\\n<每个模块名 + 该模块包含的文件路径列表>\n"
+    },
+    {
+      "id": "step_3",
+      "name": "安装依赖",
+      "type": "agent",
+      "description": "读取 requirements.md，安装三方库依赖",
+      "tools": ["fs_read_file", "project_install_deps", "shell_run", "shell_which"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task"
+      },
+      "output_mapping": {"deps_result": "result"},
+      "input_spec": {"task": "string - 项目需求描述"},
+      "output_spec": {"deps_result": "string - 依赖安装结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "读取 requirements.md，安装项目依赖：\n1. 读取 requirements.md 了解需要安装的库\n2. 根据语言使用对应工具安装（pip install / npm install / go mod tidy 等）\n3. 确认安装成功\n\n输出 result=依赖安装结果摘要\n"
+    },
+    {
+      "id": "step_4",
+      "name": "集成测试验证（Testing）",
+      "type": "skill",
+      "description": "运行测试验证各模块集成是否正确",
+      "tools": [],
+      "nested_skill": "testing",
+      "input_mapping": {
+        "task": "task",
+        "implemented_modules": "implemented_modules"
+      },
+      "output_mapping": {"test_report": "result"},
+      "input_spec": {
+        "task": "string - 项目需求",
+        "implemented_modules": "string - 已实现模块和文件列表"
+      },
+      "output_spec": {"test_report": "string - 测试报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_5",
+      "name": "代码评审（Review）",
+      "type": "skill",
+      "description": "代码质量评审：Bug、安全、性能、可维护性检查",
+      "tools": [],
+      "nested_skill": "review",
+      "input_mapping": {
+        "task": "task",
+        "implemented_modules": "implemented_modules"
+      },
+      "output_mapping": {"review_report": "result"},
+      "input_spec": {
+        "task": "string - 项目需求",
+        "implemented_modules": "string - 已实现模块和文件列表"
+      },
+      "output_spec": {"review_report": "string - Review 报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_6",
+      "name": "交付汇报",
+      "type": "agent",
+      "description": "汇总所有产出物，生成项目交付报告",
+      "tools": ["fs_read_file", "fs_list_dir", "project_tree"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "implemented_modules": "implemented_modules",
+        "test_report": "test_report",
+        "review_report": "review_report"
+      },
+      "output_mapping": {"result": "result"},
+      "input_spec": {
+        "task": "string - 项目需求",
+        "implemented_modules": "string - 已实现模块列表",
+        "test_report": "string - 测试报告",
+        "review_report": "string - Review 报告"
+      },
+      "output_spec": {"result": "string - 完整交付报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "使用 project_tree 展示最终项目结构，整理完整交付报告：\n1. 已实现模块与文件清单\n2. design/ 目录中的设计文档列表\n3. 测试结果摘要\n4. Review 结论（Critical 问题数）\n5. 如何运行项目的说明\n\n输出 result=<完整交付报告>\n"
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

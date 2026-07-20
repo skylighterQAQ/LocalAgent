@@ -1,0 +1,87 @@
+{
+  "skill_name": "cross_module_change",
+  "version": "1.1.0",
+  "description": "Cross-module impact analysis skill. For large-scale changes, automatically identifies affected APIs, databases, frontend components, services, and tests. Produces a Change Impact Report.",
+  "overview": "跨模块变更分析 Skill，识别大型修改对 API/DB/前端/服务/测试的影响范围，输出变更影响报告。",
+  "is_sub_skill": true,
+  "skill_prompt": "你是变更影响分析专家，负责在代码修改前识别所有可能受影响的模块和文件。\n\n## 分析原则\n1. 全面性：不能遗漏任何受影响的模块\n2. 分层分析：从数据层→服务层→API层→前端层逐层追踪\n3. 测试影响：必须识别需要修改或新增的测试\n4. 保守估计：不确定时列入影响范围\n5. 输出变更影响报告 IMPACT_REPORT.md\n",
+  "available_tools": [
+    "fs_grep",
+    "fs_search_files",
+    "fs_read_file",
+    "project_tree",
+    "fs_list_dir",
+    "fs_write_file",
+    "fs_create_dir",
+    "git_diff"
+  ],
+  "input_spec": {
+    "task": "string - 变更任务描述"
+  },
+  "output_spec": {
+    "result": "string - 变更影响报告摘要"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "直接影响分析",
+      "type": "agent",
+      "description": "识别直接受影响的文件和模块",
+      "tools": ["fs_grep", "fs_search_files", "fs_read_file", "project_tree", "git_diff"],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"direct_impacts": "result"},
+      "input_spec": {"task": "string - 变更任务描述"},
+      "output_spec": {"direct_impacts": "string - 直接受影响的文件列表"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "分析变更任务，识别直接受影响的文件：\n1. 搜索相关函数、类、变量的所有引用\n2. 识别数据库 Schema 变更影响的 Model/Migration\n3. 识别 API 变更影响的 Controller/Route/Client\n\n输出 result=<直接受影响的文件列表和原因>\n"
+    },
+    {
+      "id": "step_2",
+      "name": "间接影响分析 - 生成报告内容",
+      "type": "agent",
+      "description": "追踪间接影响链，生成完整变更影响报告内容（不写文件）",
+      "tools": ["fs_read_file", "fs_grep"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "direct_impacts": "direct_impacts"
+      },
+      "output_mapping": {"impact_report_content": "impact_report_content"},
+      "input_spec": {
+        "task": "string - 变更任务",
+        "direct_impacts": "string - 直接影响文件"
+      },
+      "output_spec": {"impact_report_content": "string - IMPACT_REPORT.md 的完整 Markdown 内容（将由下一步写入文件）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "基于直接影响文件，追踪间接影响，生成 IMPACT_REPORT.md 的完整内容。\n\n⚠️ 【本步骤禁止写文件】只需生成报告内容文本，文件写入由下一步骤完成。\n\n报告需包含：\n1. 变更摘要\n2. 直接影响文件（路径、修改原因）\n3. 间接影响文件（路径、影响路径说明）\n4. 数据库影响（Schema、Migration）\n5. API 影响（新增/修改/删除的端点）\n6. 前端影响（受影响的组件）\n7. 测试影响（需修改/新增的测试文件）\n8. 修改优先级建议\n\n【输出格式】\n必须严格输出以下 JSON 格式（不要有其他任何文字）：\n{\"impact_report_content\": \"<IMPACT_REPORT.md 的完整 Markdown 内容>\"}\n\n注意：JSON 字符串中的换行用 \\n 表示，双引号用 \\\" 转义，确保输出是合法的 JSON。\n"
+    },
+    {
+      "id": "step_2_write",
+      "name": "写入 IMPACT_REPORT.md",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：将上一步生成的 impact_report_content 写入 IMPACT_REPORT.md",
+      "tools": ["fs_write_file"],
+      "tool_params": [
+        {"path": "IMPACT_REPORT.md", "content": "{impact_report_content}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"impact_report_content": "impact_report_content"},
+      "output_mapping": {"result": "result"},
+      "input_spec": {"impact_report_content": "string - IMPACT_REPORT.md 的完整 Markdown 内容"},
+      "output_spec": {"result": "string - 文件写入结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "ignore",
+      "on_failure": "raise",
+      "step_prompt": null
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

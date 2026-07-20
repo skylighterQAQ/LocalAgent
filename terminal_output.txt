@@ -1,0 +1,29 @@
+You: 帮我找一下北京好吃的自助
+
+Assistant WARNING | local_agent.tools.builtin.search | search_web: Baidu search failed (无法访问百度搜索页面: Page.goto: Timeout 25000ms exceeded.
+Call log:
+
+- navigating to "https://www.baidu.com/s?wd=%E5%8C%97%E4%BA%AC%E5%A5%BD%E5%90%83%E7%9A%84%E8%87%AA%E5%8A%A9%E9%A4%90%E5%8E%85&rn=15&gpc=stf%3D1%2C1%2CSF_Timsort&tbl=3", waiting until "domcontentloaded"
+  ) — degrading to 搜狗
+  根据网络搜索结果，这里有一些推荐的北京自助餐厅：
+
+1. **第六季** - 位于东城区东安门大街，以其豪华的海鲜阵容著称。人均消费在269~349元之间。特别推荐尝试烤榴莲。
+2. **聚福园自助餐厅** - 在盘古七星酒店内，提供早中晚自助餐服务，菜品种类丰富、出品质量高。
+3. **ENJOY 精选美食电商 的回答** - 提到北京的五星级酒店大多有自助餐服务，但质量和性价比参差不齐。
+
+这些信息可以帮助你了解一些在北京比较受欢迎的自助餐厅。你可以根据自己的口味和预算选择合适的餐厅进行尝试。如果有具体需求或想了解更多详情，请告诉我！WARNING | local_agent.tools.builtin.search | search_web: Baidu search failed (无法访问百度搜索页面: Page.goto: net::ERR_TIMED_OUT at https://www.baidu.com/s?wd=%E5%8C%97%E4%BA%AC%E5%A5%BD%E5%90%83%E7%9A%84%E8%87%AA%E5%8A%A9%E9%A4%90%E5%8E%85&rn=15&gpc=stf%3D1%2C1%2CSF_Timsort&tbl=3
+Call log:
+
+- navigating to "https://www.baidu.com/s?wd=%E5%8C%97%E4%BA%AC%E5%A5%BD%E5%90%83%E7%9A%84%E8%87%AA%E5%8A%A9%E9%A4%90%E5%8E%85&rn=15&gpc=stf%3D1%2C1%2CSF_Timsort&tbl=3", waiting until "domcontentloaded"
+  ) — degrading to 搜狗
+  根据搜索结果，这里有一些推荐的北京自助餐厅：
+
+1. **第六季** - 位于东城区东安门大街，以其豪华的海鲜阵容著称。人均消费在269~349元之间。特别推荐尝试烤榴莲。
+2. **聚福园自助餐厅** - 在盘古七星酒店内，提供早中晚自助餐服务，菜品种类丰富、出品质量高。
+
+为了获取更多详细信息和最新优惠，请访问以下网站：
+
+- [第六季](https://www.zhihu.com/question/39109676/answer/150073606)
+- [聚福园自助餐厅](http://www.visitbeijing.com.cn/article/4Ik8Y5ev3nU)
+
+这些网站可以提供更详细的菜单信息、价格以及顾客评价。希望这些建议对你有所帮助！如果需要进一步的帮助或有其他问题，请随时告诉我。

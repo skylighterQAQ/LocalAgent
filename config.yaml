@@ -1,0 +1,211 @@
+# LocalAgent Configuration
+# =========================
+# Main configuration file for LocalAgent
+# 
+# Priority (high → low):
+#   1. Environment variables (e.g., OLLAMA_BASE_URL)
+#   2. .env file
+#   3. This file (config.yaml)  ← single source of truth for all settings
+#   4. Hard-coded defaults
+#
+# NOTE: config/llm.yaml has been removed. All LLM settings live here.
+# NOTE: config/skills.yaml and config/mcp.json are now mirrored here for convenience.
+#       The external files (if present) are still loaded and merged, but this file
+#       is the recommended single source of truth.
+
+# ─────────────────────────────────────────────────────────────────
+# LLM Provider
+# ─────────────────────────────────────────────────────────────────
+# Set the active provider here (or via LLM_PROVIDER env var).
+# Options: "ollama", "openai", "wanqing", "claude_code"
+# Leave empty to auto-select based on availability.
+llm:
+  provider: "ollama"
+
+ollama:
+  base_url: "http://localhost:11434"
+  default_model: "qwen2.5:7b" # qwen2.5:7b qwen3:8b
+  # models: list of models available for /model switching.
+  # Only models listed here will appear in /model command.
+  # If omitted, only default_model is available.
+  models:
+    - "qwen3:8b"
+    - "qwen2.5:7b"
+  timeout: 600  # 增加到 600 秒（10 分钟），适用于复杂推理任务（弱模型生成长代码需要更多时间）
+
+openai:
+  api_key: ""  # Set via OPENAI_API_KEY env var or here
+  base_url: ""  # Optional: for OpenAI-compatible APIs
+  default_model: "gpt-4o"
+  models:
+    - "gpt-4o"
+    - "gpt-4-turbo"
+    - "gpt-3.5-turbo"
+
+wanqing:
+  # Keep cloud credentials out of the portable project configuration.
+  api_key: ""  # Set via WANQING_API_KEY only when this provider is selected.
+  base_url: "https://wanqing-api.corp.kuaishou.com/api/gateway/v1/endpoints"
+  default_model: "ep-116jmc-1778070434284074729"
+  models:
+    - "ep-116jmc-1778070434284074729"
+  timeout: 120
+
+claude_code:
+  api_key: ""  # Set via CLAUDE_CODE_API_KEY env var or here
+  base_url: ""  # Optional: custom endpoint (leave empty for default Anthropic endpoint)
+  default_model: "claude-opus-4-5"
+  models:
+    - "claude-opus-4-5"
+    - "claude-3-5-sonnet-20241022"
+    - "claude-3-5-haiku-20241022"
+  timeout: 120
+
+# ─────────────────────────────────────────────────────────────────
+# Agent Behavior
+# ─────────────────────────────────────────────────────────────────
+agent:
+  max_iterations: 50  # Maximum ReAct loop iterations
+  verbose: true       # Enable debug logging
+  stream: true        # Enable streaming responses
+  # ── 本地模型工具调用增强 ───────────────────────────────────────────────
+  # 当模型回复没有携带 tool_calls 时，自动追加引导消息让模型重试
+  tool_call_retry: true      # 是否启用工具调用引导重试
+  max_tool_retry: 2          # 最多引导重试次数（防止无限循环）
+  # 本地模型工具精简：限制传给 LLM 的工具数量（弱模型工具太多会分心）
+  # 设为 0 禁用精简（传所有工具）
+  max_tools_for_local_model: 20  # 本地模型最大工具数量上限
+  
+  # ── 上下文管理（防止上下文爆炸）───────────────────────────────────────
+  # 控制工具结果长度，避免单次工具返回过长内容导致上下文溢出
+  max_tool_result_length: 0          # 工具结果最大字符数（0 = 不限制）
+  # 启用 LLM 总结：对超长工具结果（>8000字符）使用 LLM 进行智能总结
+  enable_tool_result_summarization: true  # 是否启用工具结果总结
+  # 滑动窗口：只保留最近 N 条消息（SystemMessage 始终保留）
+  # 设为 0 禁用滑动窗口（保留所有消息）
+  message_sliding_window: 10        # 消息历史滑动窗口大小
+  # 系统提示复用：避免每次迭代重复注入 SystemMessage
+  reuse_system_prompt: true         # 是否复用系统提示（推荐开启）
+
+# ─────────────────────────────────────────────────────────────────
+# Skills Management
+# ─────────────────────────────────────────────────────────────────
+# 技能加载配置。以下设置与 config/skills.yaml 等效，两者合并生效。
+skills:
+  auto_load: true
+  directories:
+    - "./local_agent/skills/builtin"  # 内置技能（随 LocalAgent 发布）
+    - "./skills"                       # 用户自定义技能目录
+  # 未来保留字段
+  # reload_on_change: false
+  # hot_reload: false
+
+# ─────────────────────────────────────────────────────────────────
+# Tools Management
+# ─────────────────────────────────────────────────────────────────
+tools:
+  auto_load: true
+  directories:
+    - "./local_agent/tools/builtin"
+    - "./tools"  # User custom directory
+
+# ─────────────────────────────────────────────────────────────────
+# Memory Configuration
+# ─────────────────────────────────────────────────────────────────
+memory:
+  enable_long_term: true
+  chroma_path: "./.local_agent/memory"
+  max_short_term_messages: 20
+
+# ─────────────────────────────────────────────────────────────────
+# Server Configuration
+# ─────────────────────────────────────────────────────────────────
+server:
+  host: "0.0.0.0"
+  port: 8080
+  reload: false  # Auto-reload on file changes (dev only)
+
+# ─────────────────────────────────────────────────────────────────
+# Security Settings
+# ─────────────────────────────────────────────────────────────────
+security:
+  require_confirmation: false  # Require user confirmation for destructive ops
+  allowed_dirs:
+    - "."
+    - "~"
+  max_file_size_mb: 100
+
+# ─────────────────────────────────────────────────────────────────
+# MCP (Model Context Protocol)
+# ─────────────────────────────────────────────────────────────────
+# 支持两种配置方式（可同时使用，servers 优先级更高）：
+#   1. config_path：指向外部 JSON 文件（与 Claude Desktop 格式兼容）
+#   2. servers：直接在此处内联定义 MCP 服务器，无需维护独立的 mcp.json
+#
+# 当两者均存在时，servers 中的配置会与 config_path 文件合并，同名服务器以 servers 为准。
+mcp:
+  config_path: "./config/mcp.json"  # 外部 JSON 文件（向后兼容，可选）
+  enabled: true
+
+  # 在此直接定义 MCP 服务器（推荐）
+  # 每个条目支持以下字段：
+  #   command: 可执行文件路径（stdio 模式，与 url 二选一）
+  #   args:    命令行参数列表
+  #   env:     额外的环境变量（支持 ${VAR} 占位符）
+  #   url:     SSE 端点 URL（sse 模式，与 command 二选一）
+  #   enabled: 是否启用，默认 true
+  #   description: 人可读描述
+  servers:
+    filesystem:
+      command: "npx"
+      args:
+        - "-y"
+        - "@modelcontextprotocol/server-filesystem"
+        # Start LocalAgent from the project root after moving or cloning it.
+        - "."
+      description: "本地文件系统访问"
+    github:
+      command: "npx"
+      args:
+        - "-y"
+        - "@modelcontextprotocol/server-github"
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+      description: "GitHub MCP server – 管理仓库、PR、Issue 等"
+
+# ─────────────────────────────────────────────────────────────────
+# Workspace Configuration
+# ─────────────────────────────────────────────────────────────────
+# 工作区是 LocalAgent 的项目上下文配置。
+# 配置文件: workspace.yaml（可以通过 --workspace-init 命令初始化）
+#
+# 优先级（高 → 低）：
+#   1. 命令行 --workspace 参数
+#   2. 环境变量 WORKSPACE_DIR / WORKSPACE_SKILL
+#   3. workspace.yaml 文件（自动向上查找）
+#   4. 以下默认值
+workspace:
+  # 是否自动查找并加载 workspace.yaml（从当前目录向上搜索）
+  auto_load: true
+  # 工作区配置文件路径（留空则自动搜索）
+  # config: "./workspace.yaml"
+  # 覆盖工作区目录（留空则使用 workspace.yaml 中的配置）
+  # default_dir: "./workspace"
+  # 覆盖工作区默认 skill（留空则使用 workspace.yaml 中的配置）
+  # skill: "code_executor"
+
+# ─────────────────────────────────────────────────────────────────
+# Debug Mode
+# ─────────────────────────────────────────────────────────────────
+# print_mode: 总开关。false 时所有子项均静默，true 时按子项决定打印内容。
+# print_llm:   LLM 相关 — 模型输入/输出/选择信息
+# print_tools: 工具相关 — 工具调用/工具绑定列表/重试引导
+# print_agent: Agent 状态 — 消息状态/Skill 激活信息
+# log_file:    输出重定向到文件（空 = 仅终端）
+debug:
+  print_mode: true   # 总开关（--debug 或 /debug 命令也可切换）
+  print_llm: true     # 打印 LLM 输入、输出、模型选择信息
+  print_tools: true   # 打印工具调用、工具绑定、重试引导
+  print_agent: false   # 打印消息状态、Skill 激活信息
+  log_file: "./debug_output.txt"        # 写入调试文件（留空则输出到终端）
+  # Example: log_file: "./debug_output.txt"

@@ -1,0 +1,235 @@
+{
+  "skill_name": "existing_project_developer",
+  "version": "2.0.0",
+  "description": "Develop new features or modifications on an existing codebase (secondary development). Enforces project understanding first, then generates a numbered fix plan (design/code_fix_plan_N.md), and implements changes module by module via module_developer sub-skill.",
+  "overview": "在已有项目上进行二次开发：先理解项目，再生成 code_fix_plan_N.md，最后按模块逐一修改代码，每模块内逐文件实现。",
+  "is_sub_skill": false,
+  "skill_prompt": "你是资深软件工程师，负责在已有项目上安全、精确地完成二次开发任务。\n\n## 铁律：Understand Before Modify\n1. 禁止在完成项目分析之前写任何代码\n2. 必须先生成 code_fix_plan_N.md 再开始修改代码\n3. code_fix_plan_N.md 的序号 N：检查已有 design/code_fix_plan_*.md 文件，N = 最大已有序号 + 1（如无则从 1 开始）\n4. 调用 module_developer 时，只传入该模块的修改要求，不传入其他模块信息\n5. 每次修改必须考虑对现有功能的影响\n6. 所有代码写入工作空间文件，不允许只打印\n\n## 产出物清单\n- design/code_fix_plan_N.md：本次修改的模块列表和修改要求\n- design/{module_name}_design.md：每个被修改模块的详细设计（由 module_developer 生成）\n- 修改后的代码文件\n\n## 禁止行为\n- 禁止跳过 project_understanding 直接写代码\n- 禁止跳过生成 code_fix_plan_N.md 直接修改代码\n- 禁止在调用 module_developer 时传入整个修改计划的所有模块信息（只传当前模块）\n- 禁止引入与现有架构不一致的代码风格\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_write_file",
+    "fs_list_dir",
+    "fs_search_files",
+    "fs_create_dir",
+    "fs_grep",
+    "project_scaffold",
+    "project_install_deps",
+    "project_run_command",
+    "project_tree",
+    "project_read_config",
+    "code_execute_python",
+    "code_execute_python_inline",
+    "code_execute_js",
+    "code_execute_shell",
+    "code_execute_go",
+    "code_execute_generic",
+    "code_run_file",
+    "code_lint_multi",
+    "code_format",
+    "code_run_tests",
+    "repl_eval",
+    "git_init",
+    "git_status",
+    "git_add",
+    "git_commit",
+    "git_log",
+    "git_diff",
+    "shell_run",
+    "shell_which",
+    "search_web"
+  ],
+  "input_spec": {
+    "task": "string - 开发任务描述：需要在已有项目中完成的功能、修改或修复"
+  },
+  "output_spec": {
+    "result": "string - 开发完成汇报：修改的模块列表、文件变更清单、测试结果、Review 结论"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "项目理解（Project Understanding）",
+      "type": "skill",
+      "description": "深度分析现有项目结构、技术栈、模块依赖，读取 design/plan.md（如存在）",
+      "tools": [],
+      "nested_skill": "project_understanding",
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"project_map": "result"},
+      "input_spec": {"task": "string - 开发任务描述"},
+      "output_spec": {"project_map": "string - 项目结构分析报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_2",
+      "name": "代码搜索（Code Search）",
+      "type": "skill",
+      "description": "定位与任务相关的代码文件、符号、引用链路",
+      "tools": [],
+      "nested_skill": "code_search",
+      "input_mapping": {
+        "task": "task",
+        "project_map": "project_map"
+      },
+      "output_mapping": {"candidate_files": "result"},
+      "input_spec": {
+        "task": "string - 开发任务描述",
+        "project_map": "string - 项目结构报告"
+      },
+      "output_spec": {"candidate_files": "string - 相关文件和符号列表"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_3",
+      "name": "影响范围分析（Cross Module Change）",
+      "type": "skill",
+      "description": "分析修改对 API、数据库、前端、服务、测试的影响范围",
+      "tools": [],
+      "nested_skill": "cross_module_change",
+      "input_mapping": {
+        "task": "task",
+        "candidate_files": "candidate_files",
+        "project_map": "project_map"
+      },
+      "output_mapping": {"impact_report": "result"},
+      "input_spec": {
+        "task": "string - 开发任务描述",
+        "candidate_files": "string - 相关文件列表",
+        "project_map": "string - 项目结构报告"
+      },
+      "output_spec": {"impact_report": "string - 变更影响报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_4",
+      "name": "生成修改计划（Fix Plan）",
+      "type": "agent",
+      "description": "综合任务要求、项目理解和影响分析，生成 design/code_fix_plan_N.md，列出哪些模块需要怎样修改",
+      "tools": ["fs_read_file", "fs_write_file", "fs_create_dir", "fs_search_files", "fs_list_dir"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "project_map": "project_map",
+        "candidate_files": "candidate_files",
+        "impact_report": "impact_report"
+      },
+      "output_mapping": {"fix_plan": "result"},
+      "input_spec": {
+        "task": "string - 开发任务描述",
+        "project_map": "string - 项目结构报告",
+        "candidate_files": "string - 相关文件列表",
+        "impact_report": "string - 影响分析报告"
+      },
+      "output_spec": {"fix_plan": "string - design/code_fix_plan_N.md 路径 + 模块修改清单摘要"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "综合所有分析结果，生成修改计划文档。\n\n【确定序号 N】：\n1. 使用 fs_search_files 在 design/ 目录搜索 code_fix_plan_*.md\n2. 找出最大已有序号，N = 最大序号 + 1（如无则 N=1）\n3. 用 fs_create_dir 确保 design/ 目录存在\n\n【生成 design/code_fix_plan_N.md】，内容包含：\n1. 修改背景与目标（对应用户任务）\n2. 修改模块列表（按修改顺序排列）：\n   - 模块名\n   - 修改类型（新增/修改/删除）\n   - 修改原因\n   - 需要修改/新增的文件列表（文件路径 + 修改说明）\n   - 接口变更说明（如有）\n3. 模块修改顺序说明（依赖关系）\n4. 风险点与注意事项\n\n完成后输出 result=<design/code_fix_plan_N.md 路径> + 修改模块清单：\\n<每个模块一行：模块名 | 修改类型 | 涉及文件数>\n"
+    },
+    {
+      "id": "step_5",
+      "name": "逐模块修改代码（Module Modification）",
+      "type": "agent",
+      "description": "读取 code_fix_plan_N.md，按模块顺序逐一调用 module_developer sub_skill 修改代码",
+      "tools": ["fs_read_file", "fs_list_dir"],
+      "nested_skill": "module_developer",
+      "input_mapping": {
+        "task": "task",
+        "fix_plan": "fix_plan"
+      },
+      "output_mapping": {"modified_modules": "result"},
+      "input_spec": {
+        "task": "string - 开发任务描述",
+        "fix_plan": "string - code_fix_plan_N.md 路径和修改模块清单"
+      },
+      "output_spec": {"modified_modules": "string - 已修改的所有模块及文件列表"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "读取 fix_plan 中指定的修改计划文档（fs_read_file），获取模块修改列表和顺序。\n\n按顺序对每个需要修改的模块调用 module_developer sub_skill：\n- 每次调用的 task 输入：只包含当前模块的修改要求\n  （从 code_fix_plan_N.md 中提取：模块名、修改类型、需要修改/新增的文件、接口变更说明）\n  注意：这是对现有代码的修改，需要在 task 中明确说明是修改已有文件还是新增文件\n  不要将其他模块的修改信息传入\n- 等待当前模块修改完成后再处理下一个模块\n- 记录每个模块的修改结果\n\n全部模块修改完成后，输出 result=已修改模块：\\n<每个模块名 + 该模块涉及的文件路径列表>\n"
+    },
+    {
+      "id": "step_6",
+      "name": "测试验证（Testing）",
+      "type": "skill",
+      "description": "运行测试验证功能正确，确保不破坏现有测试",
+      "tools": [],
+      "nested_skill": "testing",
+      "input_mapping": {
+        "task": "task",
+        "modified_modules": "modified_modules"
+      },
+      "output_mapping": {"test_report": "result"},
+      "input_spec": {
+        "task": "string - 开发任务描述",
+        "modified_modules": "string - 修改模块和文件列表"
+      },
+      "output_spec": {"test_report": "string - 测试报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_7",
+      "name": "代码评审（Review）",
+      "type": "skill",
+      "description": "代码质量、安全、性能、架构合规评审",
+      "tools": [],
+      "nested_skill": "review",
+      "input_mapping": {
+        "task": "task",
+        "modified_modules": "modified_modules"
+      },
+      "output_mapping": {"review_report": "result"},
+      "input_spec": {
+        "task": "string - 开发任务描述",
+        "modified_modules": "string - 修改模块和文件列表"
+      },
+      "output_spec": {"review_report": "string - Review 报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_8",
+      "name": "交付汇报",
+      "type": "agent",
+      "description": "汇总所有产出物，生成二次开发交付报告",
+      "tools": ["fs_read_file", "project_tree", "git_diff"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "fix_plan": "fix_plan",
+        "modified_modules": "modified_modules",
+        "test_report": "test_report",
+        "review_report": "review_report"
+      },
+      "output_mapping": {"result": "result"},
+      "input_spec": {
+        "task": "string - 开发任务描述",
+        "fix_plan": "string - 修改计划路径",
+        "modified_modules": "string - 已修改模块列表",
+        "test_report": "string - 测试报告",
+        "review_report": "string - Review 报告"
+      },
+      "output_spec": {"result": "string - 完整交付报告"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "整理完整的二次开发交付报告：\n1. 本次修改的 code_fix_plan_N.md 路径\n2. 修改的模块和文件清单（新增/修改/删除分类）\n3. 测试结果摘要（通过/失败数量）\n4. Review 结论（Critical 问题数，是否有需要立即修复的问题）\n5. 对现有功能的影响说明\n\n输出 result=<完整交付报告>\n"
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

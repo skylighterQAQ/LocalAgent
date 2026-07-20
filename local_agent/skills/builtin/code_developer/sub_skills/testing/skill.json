@@ -1,0 +1,72 @@
+{
+  "skill_name": "testing",
+  "version": "1.0.0",
+  "description": "Testing skill. Writes and runs unit tests, integration tests, E2E tests, and regression tests. Analyzes coverage and produces a Test Report.",
+  "overview": "测试 Skill，编写并运行单元/集成/E2E/回归测试，输出测试报告。",
+  "is_sub_skill": true,
+  "skill_prompt": "你是测试工程师，负责确保代码质量和功能正确性。\n\n## 测试原则\n1. 测试要快：单元测试必须毫秒级完成\n2. 测试要独立：每个测试用例不依赖其他测试\n3. 测试要全面：覆盖正常路径、边界情况、异常路径\n4. 测试即文档：测试名称清晰描述被测行为\n5. 必须实际运行测试，不能只声称代码应该可以运行\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_write_file",
+    "fs_create_dir",
+    "fs_list_dir",
+    "code_run_tests",
+    "code_execute_python",
+    "code_execute_python_inline",
+    "code_execute_js",
+    "code_execute_shell",
+    "code_execute_go",
+    "project_run_command",
+    "project_install_deps"
+  ],
+  "input_spec": {
+    "task": "string - 测试任务描述（测什么功能）"
+  },
+  "output_spec": {
+    "result": "string - 测试报告（通过/失败数量、覆盖率、问题列表）"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "编写测试",
+      "type": "agent",
+      "description": "读取被测代码，编写单元测试和集成测试",
+      "tools": ["fs_read_file", "fs_list_dir", "fs_write_file", "fs_create_dir"],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"test_files": "result"},
+      "input_spec": {"task": "string - 测试目标"},
+      "output_spec": {"test_files": "string - 测试文件路径列表"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "读取被测代码，编写全面的测试用例并写入测试文件：\n1. 单元测试：每个函数/方法独立测试\n2. 边界测试：空值、最大值、最小值、特殊字符\n3. 异常测试：错误输入、网络失败、数据库异常\n4. 集成测试（如适用）\n\n输出 result=<测试文件路径列表>\n"
+    },
+    {
+      "id": "step_2",
+      "name": "运行测试",
+      "type": "agent",
+      "description": "安装依赖、运行测试、生成测试报告",
+      "tools": ["project_install_deps", "code_run_tests", "project_run_command", "fs_write_file"],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "test_files": "test_files"
+      },
+      "output_mapping": {"result": "result"},
+      "input_spec": {
+        "task": "string - 测试目标",
+        "test_files": "string - 测试文件列表"
+      },
+      "output_spec": {"result": "string - 测试报告（通过/失败/跳过数量 + 失败详情）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "运行所有测试：\n1. project_install_deps 安装测试依赖\n2. code_run_tests 执行测试\n3. 修复失败的测试（如果是代码问题）\n4. 汇总测试结果\n\n完成后输出 result=<测试报告：通过/失败/跳过数量 + 覆盖率 + 失败详情>\n"
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

@@ -1,0 +1,142 @@
+{
+  "skill_name": "code_file_developer",
+  "version": "1.2.0",
+  "description": "Single-file code implementation skill. Receives a precise file-level design spec (file path, purpose, interfaces, dependencies) and produces the complete, production-ready source file. Runs lint checks and fixes before completion.",
+  "overview": "单文件代码实现 Skill，接收文件级设计说明，生成完整代码并写入文件，lint 通过后完成。",
+  "is_sub_skill": true,
+  "skill_prompt": "你是专注于单文件实现的代码工程师。\n\n## 铁律\n1. 只实现当前输入描述的那一个文件，不要主动创建其他文件\n2. 代码必须写入文件（fs_write_file），禁止只打印代码\n3. 文件写入后必须执行 lint 检查并修复所有错误\n4. 必须遵循设计说明中指定的接口、函数签名和依赖关系\n5. 包含必要的错误处理、类型注解（Python/TS）和关键注释\n6. 优先复用项目已有模式，不引入额外依赖\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_write_file",
+    "fs_list_dir",
+    "fs_create_dir",
+    "fs_grep",
+    "project_tree",
+    "code_lint_multi",
+    "code_format",
+    "code_execute_python_inline",
+    "repl_eval",
+    "search_web"
+  ],
+  "input_spec": {
+    "task": "string - 该文件的设计说明：文件路径、功能描述、对外接口、依赖的其他模块/文件"
+  },
+  "output_spec": {
+    "result": "string - 已实现的文件路径 + lint 结果摘要"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "理解上下文与依赖，提取目标文件路径",
+      "type": "llm",
+      "description": "从设计说明中提取目标文件路径和实现上下文（不调用任何工具，只分析 task 输入）",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"context": "result", "target_file_path": "target_file_path"},
+      "input_spec": {"task": "string - 文件设计说明"},
+      "output_spec": {
+        "context": "string - 实现上下文：依赖接口、编码规范、实现注意点",
+        "target_file_path": "string - 目标文件路径（从 task 中提取）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "⚠️ 【严格禁止调用任何工具】只需分析 task 内容，不调用任何工具。\n\n从 task 中提取以下信息：\n\n1. 目标文件路径（从 task 中「文件路径」或路径格式的内容提取，如 data_grabber/data_grabber.py）\n2. 该文件的功能定位和职责\n3. 需要实现的具体函数/类/接口签名\n4. 该文件的依赖说明（其他模块或文件）\n\n⚠️ 【文件路径规范】\n目标文件路径必须包含模块目录前缀，格式为 <module_name>/<filename>.<ext>。\n如果 task 中的文件路径缺少模块目录前缀（如只有 data_grabber.py），需要从 task 的模块名字段中补全（如 data_grabber/data_grabber.py）。\n\n输出格式（两行，顺序不变）：\ntarget_file_path=<目标文件相对路径，含模块目录前缀>\nresult=<实现上下文摘要：功能定位、接口签名、依赖关系、注意事项>\n"
+    },
+    {
+      "id": "step_2",
+      "name": "创建代码文件",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：在目标文件路径创建目录并写入占位文件，确保文件存在",
+      "tools": ["fs_create_dir", "fs_write_file"],
+      "tool_params": [
+        {"path": "{target_file_dir}"},
+        {"path": "{target_file_path}", "content": "# TODO: 待实现\n# 文件：{target_file_path}\n"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {
+        "target_file_path": "target_file_path",
+        "target_file_dir": "target_file_dir"
+      },
+      "output_mapping": {"file_path": "result"},
+      "input_spec": {
+        "target_file_path": "string - 目标文件路径（由 step_1 提取）",
+        "target_file_dir": "string - 目标文件所在目录（由框架从 target_file_path 推断）"
+      },
+      "output_spec": {"file_path": "string - 已创建的文件路径"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_3",
+      "name": "生成完整代码内容",
+      "type": "llm",
+      "description": "基于设计说明和上下文，生成完整文件内容（不调用任何工具，只输出文本），由下一步骤写入文件",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {
+        "task": "task",
+        "context": "context",
+        "file_path": "file_path"
+      },
+      "output_mapping": {"file_content": "file_content"},
+      "input_spec": {
+        "task": "string - 文件设计说明",
+        "context": "string - 实现上下文",
+        "file_path": "string - 已创建的文件路径"
+      },
+      "output_spec": {"file_content": "string - 完整的文件内容（将由 step_3_write 写入磁盘）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "基于设计说明和上下文，生成 file_path 指定文件的完整内容。\n\n⚠️ 【严格禁止调用任何工具】只需输出文件内容，文件写入由下一步骤完成。\n\n首先判断文件类型（从 task 中 \"文件类型\" 字段获取，或根据文件扩展名推断）：\n\n## 【类型 A】代码文件（.py / .ts / .js / .go / .java 等）\n- 包含所有 import、函数实现、错误处理、类型注解\n- 不要留 TODO 或伪代码占位，必须是可运行的完整实现\n- 遵循 context 中总结的编码规范\n\n## 【类型 B】文档文件（README.md / 使用说明 / .md）\n- 包含模块/文件概述、使用方法、接口说明、示例代码、注意事项\n- 文档要对使用者友好\n\n## 【类型 C】配置文件（.yaml / .json / .toml / .env.example 等）\n- 生成带详细注释的配置模板，每个配置项说明用途和可选值\n\n## 【类型 D】测试文件（test_*.py / *.test.ts 等）\n- 覆盖核心逻辑的正常路径、边界情况、异常情况\n\n⚠️ 【输出格式 - 必须严格遵守】\n直接输出文件的完整内容，不要有任何 JSON 包装、不要有任何说明文字、不要用 markdown 代码块包裹。\n你输出的第一个字符就是文件内容的第一个字符，最后一个字符就是文件内容的最后一个字符。\n"
+    },
+    {
+      "id": "step_3_write",
+      "name": "写入代码文件",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：将上一步生成的 file_content 写入目标文件",
+      "tools": ["fs_write_file"],
+      "tool_params": [
+        {"path": "{file_path}", "content": "{file_content}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"file_path": "file_path", "file_content": "file_content"},
+      "output_mapping": {"file_path": "result"},
+      "input_spec": {
+        "file_path": "string - 目标文件路径",
+        "file_content": "string - 完整的文件内容"
+      },
+      "output_spec": {"file_path": "string - 已写入的文件路径"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_4",
+      "name": "Lint 检查与修复",
+      "type": "agent",
+      "description": "对写入的文件执行 lint 检查，修复所有错误",
+      "tools": ["code_lint_multi", "code_format", "fs_read_file", "fs_write_file"],
+      "nested_skill": null,
+      "input_mapping": {
+        "file_path": "file_path"
+      },
+      "output_mapping": {"result": "result"},
+      "input_spec": {"file_path": "string - 已写入的文件路径"},
+      "output_spec": {"result": "string - 文件路径 + lint 结果（通过/修复了N个错误）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "对 file_path 指定的文件执行质量检查：\n1. 调用 code_lint_multi 检查语法和风格错误\n2. 如有错误，读取文件内容，修复问题，重新写入，然后再次调用 code_lint_multi 确认\n3. 重复检查直到无 error 级别的问题（最多重复 2 次）\n4. 最后调用 code_format 格式化代码（如适用）\n\n⚠️ 【强制停止规则 - 违反将导致无限循环】\n- 每次 code_lint_multi 调用完成后，必须分析其输出结果\n- 若结果显示「no issues found」或「0 errors」或「lint passed」，说明检查已通过，必须立即停止所有工具调用，直接输出结果\n- 禁止对同一文件重复调用相同参数的 code_lint_multi，第一次通过即视为完成\n- 禁止在 lint 通过后继续调用任何检查工具\n\n输出 result=<文件路径> lint <通过/修复了N个错误>\n"
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

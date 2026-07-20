@@ -1,0 +1,146 @@
+{
+  "skill_name": "url_accessor",
+  "version": "1.1.0",
+  "description": "直接访问外部链接的专用 skill：支持通过 HTTP/HTTPS 抓取 URL 内容、提取网页正文、获取页面元数据、以及通过无头浏览器渲染 JavaScript 动态页面。",
+  "overview": "精准访问指定 URL 并读取内容的 skill，自动选择最优访问策略（HTTP 抓取或无头浏览器），结构化输出页面正文和元数据。",
+  "skill_prompt": "你是精准的 URL 内容访问器，负责安全可靠地获取指定网页内容。\n\n## 全局规则（每步均适用）\n1. 优先使用 fetch_url（轻量快速），失败时自动降级到 browser_get_text\n2. 百度跳转链接（URL 含 baidu.com/link?url=）必须用 browser_get_text 或 browser_navigate\n3. 每次访问后明确告知访问状态和原因（成功/失败/部分内容）\n4. 完整输出所有正文内容，不截断\n5. 遇到登录墙或 bot-detection 时诚实告知，不返回空内容\n6. 若提供了 query，优先提取与 query 相关的段落\n7. 工具调用后必须解析返回内容，确认是否获取到有效数据\n",
+  "available_tools": [
+    "fetch_url",
+    "browser_get_text",
+    "browser_navigate",
+    "browser_extract_links",
+    "browser_screenshot",
+    "fs_write_file"
+  ],
+  "input_spec": {
+    "url": "string - 要访问的目标 URL（必须是 http/https 格式）",
+    "query": "string - （可选）用户的研究问题，用于相关性筛选"
+  },
+  "output_spec": {
+    "content": "string - 页面主要正文内容",
+    "title": "string - 页面标题",
+    "status": "string - 访问状态（success/failed + 原因）"
+  },
+  "on_input_mismatch": "raise",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "解析 URL 类型",
+      "type": "llm",
+      "description": "分析 URL 特征，判断页面类型和最佳访问策略",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {"url": "url"},
+      "output_mapping": {
+        "url_type": "url_type",
+        "access_strategy": "access_strategy"
+      },
+      "input_spec": {
+        "url": "string - 目标 URL（必须非空）"
+      },
+      "output_spec": {
+        "url_type": "string - URL 类型（static/dynamic-spa/api/file/baidu-redirect）",
+        "access_strategy": "string - 推荐的访问工具（fetch_url/browser_get_text/browser_navigate）"
+      },
+      "input_validation_policy": "raise",
+      "output_validation_policy": "raise",
+      "on_failure": "raise",
+      "step_prompt": "分析 URL 特征，判断页面类型和最佳访问策略：\n- 普通静态页面 → fetch_url\n- JavaScript 渲染的 SPA（如 React/Vue 应用）→ browser_get_text\n- 百度跳转链接（含 baidu.com/link?url=）→ 必须用 browser_navigate 或 browser_get_text\n- API 接口（/api/ 路径，JSON 响应）→ fetch_url\n- 视频/流媒体平台（iqiyi.com、bilibili.com、youku.com、douyin.com、kuaishou.com、tiktok.com、youtube.com、v.qq.com、mgtv.com）→ 必须用 browser_get_text（这些网站使用JavaScript渲染，httpx无法获取内容）\n- 社交媒体平台（weibo.com、zhihu.com、xiaohongshu.com、douban.com）→ 必须用 browser_get_text\n\n你必须严格按以下 JSON 格式输出，不要输出任何其他文字：\n{\"url_type\": \"<类型>\", \"access_strategy\": \"<工具名>\"}\n其中 url_type 只能是: static / dynamic-spa / api / file / baidu-redirect\naccess_strategy 只能是: fetch_url / browser_get_text / browser_navigate\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_2",
+      "name": "执行访问",
+      "type": "agent",
+      "description": "按策略调用对应工具访问 URL，fetch_url 失败时自动降级到 browser_get_text",
+      "tools": ["fetch_url", "browser_get_text", "browser_navigate"],
+      "nested_skill": null,
+      "input_mapping": {
+        "url": "url",
+        "access_strategy": "access_strategy"
+      },
+      "output_mapping": {
+        "raw_content": "raw_content",
+        "final_url": "final_url",
+        "http_status": "http_status"
+      },
+      "input_spec": {
+        "url": "string - 目标 URL",
+        "access_strategy": "string - 访问策略（工具名）"
+      },
+      "output_spec": {
+        "raw_content": "string - 原始页面内容（非空才算成功）",
+        "final_url": "string - 实际访问的 URL（处理重定向后）",
+        "http_status": "string - 访问状态码或状态描述"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "retry:2",
+      "step_prompt": "按策略调用对应工具访问 URL。\nfetch_url 失败（返回错误/空内容）时，自动降级到 browser_get_text。\n调用工具后解析返回结果：确认是否获得了有效的页面内容（非空/非错误页面）。\n记录最终访问 URL 和状态，写入对应输出字段。\nraw_content 必须包含实际页面内容，不能为空字符串。\n\n【重要】调用 fetch_url 时只传 url 参数（以及可选的 extract_text），绝对不要传 access_strategy 或其他参数。access_strategy 是本步骤的上下文参考信息，不是工具的参数。\n\n【降级规则】如果调用 fetch_url 后返回结果满足以下任意条件，必须立即改用 browser_get_text 重试：\n1. 返回内容为空或只有URL本身\n2. 返回内容包含 'Error' 或 '[Tool Error]'\n3. 返回内容非常短（少于100字符）\n4. 返回内容是JS/JSON配置或明显不是正文（如只有脚本标签）\n\n【特别注意】如果 access_strategy 是 browser_get_text，直接使用 browser_get_text，跳过 fetch_url。\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_3",
+      "name": "提取结构化内容",
+      "type": "llm",
+      "description": "从原始页面内容中提取标题、主要正文，清理噪音，按 query 筛选相关段落",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {
+        "raw_content": "raw_content",
+        "url": "url",
+        "query": "query"
+      },
+      "output_mapping": {
+        "title": "title",
+        "content": "content",
+        "status": "status"
+      },
+      "input_spec": {
+        "raw_content": "string - 原始页面内容",
+        "url": "string - 来源 URL",
+        "query": "string - 研究问题（可选）"
+      },
+      "output_spec": {
+        "title": "string - 页面标题",
+        "content": "string - 提取的主要正文内容（已清理噪音）",
+        "status": "string - 访问状态说明（成功/部分/失败及原因）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "从原始页面内容中提取有用信息：\n1. 提取页面标题（<title> 或 <h1> 内容）\n2. 提取主要正文，清理：导航栏、广告、脚本、样式、页脚\n3. 若有 query，优先保留与 query 相关的段落\n4. 【严格要求】完整逐字输出所有正文内容，绝对禁止使用 '...' 省略任何内容。如果内容很长，必须全部输出，不得以任何形式截断或缩写。\n分别写入 title、content、status 字段。\n",
+      "system_prompt": null
+    },
+    {
+      "id": "step_4",
+      "name": "保存内容（可选）",
+      "type": "agent",
+      "description": "仅当用户明确要求保存时执行，将正文内容保存到本地文件",
+      "tools": ["fs_write_file"],
+      "nested_skill": null,
+      "input_mapping": {
+        "content": "content",
+        "url": "url"
+      },
+      "output_mapping": {
+        "saved_path": "saved_path"
+      },
+      "input_spec": {
+        "content": "string - 正文内容",
+        "url": "string - 来源 URL"
+      },
+      "output_spec": {
+        "saved_path": "string - 保存的本地文件路径"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "ignore",
+      "on_failure": "skip",
+      "step_prompt": "仅当用户明确要求保存时执行此步骤。\n根据 url 生成合适的本地文件名（如取域名+路径片段），不要将 url 原样作为文件名。\n调用 fs_write_file 保存，确认写入成功后把路径写入 saved_path。\n如果用户没有要求保存，直接输出 saved_path=null。\n",
+      "system_prompt": null
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

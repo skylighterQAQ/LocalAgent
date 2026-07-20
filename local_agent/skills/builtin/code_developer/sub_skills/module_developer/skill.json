@@ -1,0 +1,140 @@
+{
+  "skill_name": "module_developer",
+  "version": "1.5.0",
+  "description": "Module-level code development skill. Receives a single module's design requirements (module name, language, responsibilities, interfaces, dependencies), generates a detailed module design document (design/{module_name}_design.md) that lists all files needed (code files, README, config, tests, etc.) and their responsibilities, then implements each file one by one via code_file_developer sub-skill. Supports 'design_only' mode to only generate design docs without code implementation.",
+  "overview": "模块级代码开发 Skill，接收单个模块的设计要求，生成模块设计文档（design/{module_name}_design.md），明确模块下需要哪些文件（代码文件、使用说明、运行支撑文件等，按需选取），再逐文件调用 code_file_developer 实现。支持 design_only 模式（仅生成设计文档）。",
+  "is_sub_skill": true,
+  "allowed_parent_skills": ["existing_project_developer", "greenfield_developer"],
+  "skill_prompt": "你是模块级开发专家，负责将一个模块的设计要求转化为完整的代码实现。\n\n## 核心原则\n1. 先写设计文档，再写代码：必须先生成 design/{module_name}_design.md，再开始实现\n2. 模块边界清晰：只实现本模块的代码，不越界修改其他模块\n3. 文件粒度精准：设计文档中每个文件的职责必须单一且明确\n4. 调用 code_file_developer 时，每次只传入该文件的设计说明，不传入整个模块所有文件的信息\n5. 按依赖顺序实现文件：底层文件先于上层文件\n6. 文件清单按需规划：不是每个模块都需要全套文件，根据模块复杂度和职责合理决定需要哪些文件\n\n## design_only 模式\n若 task 中包含\"执行模式：design_only\"，则只生成设计文档（step_1~step_3c），跳过代码实现（step_4）。\n\n## 文件类型参考（按需选取，不要求全部具备）\n- 核心代码文件：模块的主要逻辑实现（必须有）\n- README.md / 使用说明：对外文档，说明如何使用本模块（接口清晰时建议有）\n- 配置文件：如 config.yaml, .env.example 等（有可配置项时）\n- 数据模型 / Schema 文件：数据结构定义（有复杂数据结构时）\n- 测试文件：单元测试（核心逻辑需要时）\n- 初始化脚本 / setup 文件：如 __init__.py, index.ts（需要包入口时）\n- 工具脚本：辅助运行的脚本（有运行支撑需求时）\n\n## 禁止行为\n- 禁止跳过设计文档直接写代码\n- 禁止在 code_file_developer 的 prompt 中传入其他文件的实现细节（只传该文件相关的）\n- 禁止盲目为每个模块添加全套文件，应根据实际需要裁剪\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_write_file",
+    "fs_list_dir",
+    "fs_create_dir",
+    "fs_grep",
+    "project_tree"
+  ],
+  "input_spec": {
+    "task": "string - 该模块的完整设计要求，格式为：模块名：<name>\\n编程语言：<lang>\\n职责：<desc>\\n对外接口：<interfaces>\\n依赖模块：<deps>\\n技术选型：<stack>\\n设计文档路径：design/<module_name>_design.md\\n（可选）执行模式：design_only"
+  },
+  "output_spec": {
+    "result": "string - 已实现的模块文件列表 + 设计文档路径"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "提取模块名与执行模式",
+      "type": "llm",
+      "description": "从 task 中提取模块名（snake_case）和执行模式（normal 或 design_only），供后续步骤使用",
+      "tools": [],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"module_name": "module_name", "design_only": "design_only"},
+      "input_spec": {"task": "string - 模块设计要求"},
+      "output_spec": {
+        "module_name": "string - 模块名称（snake_case）",
+        "design_only": "string - 执行模式：'true' 表示仅生成设计文档，'false' 表示完整实现"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "从 task 中提取以下信息：\n\n1. 从 \"模块名：\" 字段提取模块名称（snake_case 格式）\n2. 检查 task 中是否包含 \"执行模式：design_only\" 这段**原文字符串**，若包含则 design_only=true，否则 design_only=false\n\n⚠️ 【严格禁止】：\n- 禁止根据推断、历史上下文或默认值将 design_only 设为 true\n- 禁止因为\"之前调用过 design_only 模式\"就推测本次也是 design_only\n- 只有当 task 原文中明确包含 \"执行模式：design_only\" 时，才能输出 design_only=true\n- 如果 task 中没有这段文字，无论任何情况，design_only 必须且只能是 false\n\n只输出两行，不要有其他内容：\nmodule_name=<模块名称>\ndesign_only=<true 或 false>\n\n示例（普通模式，task 中无 '执行模式：design_only'）：\nmodule_name=data_collector\ndesign_only=false\n\n示例（仅设计模式，task 中有 '执行模式：design_only'）：\nmodule_name=trading_engine\ndesign_only=true\n"
+    },
+    {
+      "id": "step_2",
+      "name": "创建设计文档文件与模块文件夹",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：依次创建 design/ 目录和 {module_name}/ 模块代码目录",
+      "tools": ["fs_create_dir", "fs_create_dir"],
+      "tool_params": [
+        {"path": "design"},
+        {"path": "{module_name}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"module_name": "module_name"},
+      "output_mapping": {"scaffold_result": "result"},
+      "input_spec": {
+        "module_name": "string - 模块名称（由 step_1 提取）"
+      },
+      "output_spec": {
+        "scaffold_result": "string - 已创建的设计文档路径和模块文件夹路径"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_3",
+      "name": "生成模块设计文档内容（含文件清单规划）",
+      "type": "llm",
+      "description": "根据模块设计要求生成详细设计文档内容：优先读取已存在的设计文档复用，文件不存在时由 LLM 自行生成",
+      "tools": ["fs_read_file"],
+      "nested_skill": null,
+      "input_mapping": {"task": "task", "module_name": "module_name"},
+      "output_mapping": {"module_design": "module_design", "module_design_content": "module_design_content"},
+      "input_spec": {
+        "task": "string - 模块设计要求（包含模块名、语言、职责、接口、依赖、技术选型、设计文档路径）",
+        "module_name": "string - 模块名称"
+      },
+      "output_spec": {
+        "module_design": "string - design/{module_name}_design.md 的完整路径",
+        "module_design_content": "string - 设计文档的完整 Markdown 内容（含文件清单，将由下一步写入文件）"
+      },
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "你的任务是获取模块设计文档内容，供后续步骤使用。\n\n【第一步：尝试读取已存在的设计文档】\n调用 fs_read_file 读取 design/{module_name}_design.md。\n- 若读取成功（返回内容不以 'Error:' 开头），则直接将读取到的内容作为 module_design_content，跳过重新生成，直接按输出格式输出结果。\n- 若读取失败（文件不存在，返回以 'Error:' 开头），则按以下步骤自行生成设计内容。\n\n【第二步（仅文件不存在时执行）：生成设计文档内容】\n根据 task 中提供的模块设计要求，生成详细的模块设计文档内容。\n\n⚠️ 【第二步中严格禁止调用任何工具】只需输出文本内容，不调用任何工具，文件写入由下一步骤完成。\n\n【规划文件清单（最重要）】\n根据模块职责、复杂度、语言特性，决定该模块下需要哪些文件。\n\n⚠️ 【文件路径规范 - 必须严格遵守】\n所有代码文件路径必须以模块目录为前缀，格式为：<module_name>/<filename>.<ext>\n例如（假设 module_name=data_grabber）：\n- ✅ 正确：data_grabber/data_grabber.py、data_grabber/config.py\n- ❌ 错误：data_grabber.py、src/data_grabber.py（缺少或错误的模块目录前缀）\n\n可选文件类型（不要求全部具备，按需选取）：\n- 核心代码文件（必须）：模块主要逻辑\n- 包入口文件（视语言/框架）：如 Python 的 __init__.py\n- 数据模型/Schema（有复杂数据结构时）：如 models.py\n- 配置文件（有可配置项时）：如 config.yaml\n- README.md / 使用说明（模块接口较多时）\n- 单元测试（核心逻辑时）：如 test_{module_name}.py\n\n【设计文档内容要求】\n设计文档必须包含：\n## 1. 模块概述（功能定位、技术选型、对外接口、模块边界）\n## 2. 文件清单（按依赖顺序，每个文件含路径、类型、职责、主要类/函数签名、依赖）\n## 3. 模块内数据流说明\n## 4. 错误处理策略\n## 5. 实现顺序\n\n⚠️ 【输出格式 - 必须严格遵守】\n必须先输出以下单行内容（不要换行、不要额外文字）：\nmodule_design=design/<module_name>_design.md\n\n紧接着空一行，然后直接输出设计文档的完整 Markdown 内容（即 module_design_content），不要有任何 JSON 包装。\n\n示例输出：\nmodule_design=design/data_grabber_design.md\n\n# data_grabber 设计文档\n## 1. 模块概述\n...\n"
+    },
+    {
+      "id": "step_3_write",
+      "name": "写入模块设计文档",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：将上一步生成的 module_design_content 写入 design/{module_name}_design.md",
+      "tools": ["fs_write_file"],
+      "tool_params": [
+        {"path": "{module_design}", "content": "{module_design_content}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"module_design": "module_design", "module_design_content": "module_design_content"},
+      "output_mapping": {"design_write_result": "result"},
+      "input_spec": {
+        "module_design": "string - 设计文档路径（如 design/xxx_design.md）",
+        "module_design_content": "string - 设计文档完整 Markdown 内容"
+      },
+      "output_spec": {"design_write_result": "string - 文件写入结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "ignore",
+      "on_failure": "raise",
+      "step_prompt": null
+    },
+    {
+      "id": "step_4",
+      "name": "逐文件实现代码",
+      "type": "skill",
+      "description": "读取模块设计文档，按文件顺序逐一调用 code_file_developer 实现每个文件。若为 design_only 模式则跳过本步骤。",
+      "tools": ["fs_read_file", "fs_list_dir", "fs_grep"],
+      "nested_skill": "code_file_developer",
+      "input_mapping": {
+        "task": "task",
+        "module_design": "module_design",
+        "design_only": "design_only"
+      },
+      "output_mapping": {"result": "result"},
+      "input_spec": {
+        "task": "string - 模块设计要求",
+        "module_design": "string - 模块设计文档路径 + 文件清单",
+        "design_only": "string - 'true' 表示仅生成设计文档，跳过代码实现"
+      },
+      "output_spec": {"result": "string - 已实现的所有文件路径列表，或 design_only 模式下的跳过说明"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "skip",
+      "step_prompt": "⚠️ 【首先检查执行模式】\n若 design_only 字段值为 \"true\"，则立即输出跳过说明，不要读取任何文件，不要调用任何工具：\nresult=design_only 模式：跳过代码实现，设计文档已生成\n\n仅当 design_only 不为 \"true\" 时，才执行以下代码实现步骤：\n\n读取 module_design 中指定的设计文档（fs_read_file），获取文件清单和实现顺序。\n\n按顺序对每个文件调用 code_file_developer sub_skill：\n- 每次调用的 task 输入：只包含当前文件的设计说明（文件路径 + 文件类型 + 职责 + 主要接口 + 它依赖的文件 + 与外部模块的交互关系），不要把整个模块所有文件的信息都传入\n- 等待每个文件实现完成后再处理下一个\n- 如某个文件实现失败，记录错误并继续处理其余文件（不要因单个文件失败而中止整个模块）\n\n全部文件实现完成后，输出 result=<模块名> 已实现文件：\\n<每行一个文件路径>\n"
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

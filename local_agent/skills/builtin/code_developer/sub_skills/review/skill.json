@@ -1,0 +1,64 @@
+{
+  "skill_name": "review",
+  "version": "1.1.0",
+  "description": "Code review skill. Detects bugs, security vulnerabilities, performance issues, and maintainability problems. Checks architecture compliance. Produces Review Report and Risk Report.",
+  "overview": "代码评审 Skill，检测 Bug、安全漏洞、性能问题、架构合规，输出 Review 报告。",
+  "is_sub_skill": true,
+  "skill_prompt": "你是资深代码评审专家，负责发现代码中的问题并给出改进建议。\n\n## 评审原则\n1. 客观中立：只关注代码质量，不关注作者\n2. 分级标记：Critical（必须修复）/ Warning（建议修复）/ Info（参考）\n3. 给出改进示例：不只指出问题，给出具体修改建议\n4. 关注安全：SQL 注入、XSS、CSRF、权限检查等\n5. 关注性能：N+1 查询、不必要的循环、内存泄漏\n",
+  "available_tools": [
+    "fs_read_file",
+    "fs_grep",
+    "fs_search_files",
+    "fs_list_dir",
+    "fs_write_file",
+    "git_diff",
+    "code_lint_multi"
+  ],
+  "input_spec": {
+    "task": "string - 评审任务描述（评审哪些文件或功能）"
+  },
+  "output_spec": {
+    "result": "string - Review 报告（问题列表、风险等级、改进建议）"
+  },
+  "on_input_mismatch": "warn",
+  "on_output_mismatch": "warn",
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "代码评审 - 生成报告内容",
+      "type": "agent",
+      "description": "全面评审代码质量、安全、性能、架构合规，生成 REVIEW_REPORT.md 内容（不写文件）",
+      "tools": ["fs_read_file", "fs_grep", "fs_list_dir", "git_diff", "code_lint_multi"],
+      "nested_skill": null,
+      "input_mapping": {"task": "task"},
+      "output_mapping": {"review_report_content": "review_report_content"},
+      "input_spec": {"task": "string - 评审目标"},
+      "output_spec": {"review_report_content": "string - REVIEW_REPORT.md 的完整 Markdown 内容（将由下一步写入文件）"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "warn",
+      "on_failure": "raise",
+      "step_prompt": "对目标代码进行全面评审，生成 REVIEW_REPORT.md 的完整内容。\n\n⚠️ 【本步骤禁止写文件】只需生成报告内容文本，文件写入由下一步骤完成。\n\n评审维度：\n1. Bug 检测（逻辑错误、边界条件）\n2. 安全审查（输入验证、认证授权、数据加密）\n3. 性能审查（N+1查询、缓存使用、算法复杂度）\n4. 可维护性（命名规范、注释、函数长度、循环依赖）\n5. 架构合规（是否符合项目架构约定）\n\n每个问题标注：\n- 等级：Critical / Warning / Info\n- 位置：文件路径 + 行号\n- 问题描述\n- 改进建议\n\n【输出格式】\n必须严格输出以下 JSON 格式（不要有其他任何文字）：\n{\"review_report_content\": \"<REVIEW_REPORT.md 的完整 Markdown 内容>\"}\n\n注意：JSON 字符串中的换行用 \\n 表示，双引号用 \\\" 转义，确保输出是合法的 JSON。\n"
+    },
+    {
+      "id": "step_1_write",
+      "name": "写入 REVIEW_REPORT.md",
+      "type": "tool",
+      "description": "直接调用工具（不经过 LLM）：将上一步生成的 review_report_content 写入 REVIEW_REPORT.md",
+      "tools": ["fs_write_file"],
+      "tool_params": [
+        {"path": "REVIEW_REPORT.md", "content": "{review_report_content}"}
+      ],
+      "nested_skill": null,
+      "input_mapping": {"review_report_content": "review_report_content"},
+      "output_mapping": {"result": "result"},
+      "input_spec": {"review_report_content": "string - REVIEW_REPORT.md 的完整 Markdown 内容"},
+      "output_spec": {"result": "string - 文件写入结果"},
+      "input_validation_policy": "warn",
+      "output_validation_policy": "ignore",
+      "on_failure": "raise",
+      "step_prompt": null
+    }
+  ],
+  "generated_at": "",
+  "source_md5": ""
+}

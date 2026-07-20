@@ -686,6 +686,21 @@ def _has_write_tool_called(messages: "List[BaseMessage]", write_tool_names: "tup
 _FILE_WRITE_TOOL_NAMES = ("fs_write_file",)
 
 
+def _is_substantive_final_response(content: str) -> bool:
+    """Return True for an answer that is complete enough to end a turn.
+
+    The old first-turn retry rule treated every text-only response as a failed
+    tool call.  That made a completed answer re-enter the tool loop merely
+    because tools happened to be bound (including file-writing tools).
+    """
+    text = (content or "").strip()
+    if len(text) < 80:
+        return False
+    # A multi-line answer or a reasonably detailed paragraph is a terminal
+    # response unless another explicit retry condition below applies.
+    return "\n" in text or len(text) >= 180
+
+
 def _should_retry_tool_call(
     response: AIMessage,
     iteration_count: int,
@@ -699,8 +714,7 @@ def _should_retry_tool_call(
       1. 模型回复为空（无 content、无 tool_calls）—— 通常是 qwen3 等 thinking 模型
          在上下文混乱或子引擎超时后的异常状态
       2. 模型回复包含"我无法/unable to"等词汇 + 没有工具调用
-      3. 这是第一次回复（iteration=1）且没有工具调用
-         （首次回复未调用工具说明模型没有"启动"）
+      3. 首轮回复很短、且没有工具调用（通常是模型尚未启动任务）
       4. 消息历史中还有来自搜索结果的 URL 尚未被访问
          （防止模型访问第一个 URL 后满足于内容直接输出最终答案，跳过其余 URL）
       5. 文件写入任务未完成 — 可用工具中有 fs_write_file，但历史中尚未出现
@@ -721,14 +735,14 @@ def _should_retry_tool_call(
     if any(hint in content_lower for hint in _SHOULD_HAVE_USED_TOOL_HINTS):
         return True
 
-    # 条件 2：前两轮没有调用工具（初始阶段未启动工具调用链）
+    # 条件 2：前两轮的简短回复没有调用工具（初始阶段未启动工具调用链）
     # 注意：仅当消息历史中没有任何 ToolMessage 时才适用。
     # 如果模型已经调用过工具并产生了结果（如写了文件、执行了搜索），说明工具链已正常启动。
     # 此时不应因为 iteration_count <= 2 而强制注入重试引导，否则会造成不必要的额外 LLM 调用，
     # 多次叠加后容易触发 Ollama 超时（timed out）错误。
     if iteration_count <= 2:
         has_any_tool_results = messages is not None and any(isinstance(m, ToolMessage) for m in messages)
-        if not has_any_tool_results:
+        if not has_any_tool_results and not _is_substantive_final_response(response.content or ""):
             return True
 
     # 条件 3：消息历史中还有未访问的 URL（需继续遍历所有搜索结果）

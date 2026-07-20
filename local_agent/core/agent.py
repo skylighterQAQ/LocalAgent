@@ -677,14 +677,25 @@ class LocalAgent:
             global_context=message,
         )
 
-        # 提取最终结果（优先 result 字段，否则拼接所有上下文）
-        final_result = result_ctx.get("result", "")
+        # 提取最终结果。JSON skill 已在顶层 output_spec 声明用户可见的
+        # 最终字段（例如 web_researcher 的 report）；不能把执行上下文中的
+        # 搜索关键词、原始工具结果等中间值拼进终端回复。
+        final_result = self._select_skill_final_output(parsed_config, result_ctx)
         if not final_result:
-            # fallback：拼接所有输出字段
+            # 仅在 skill 未声明或未产出任何顶层输出时才保留旧兜底行为。
             parts = [str(v) for k, v in result_ctx.items() if v and k != "task"]
             final_result = "\n\n".join(parts)
 
         return final_result
+
+    @staticmethod
+    def _select_skill_final_output(parsed_config: Any, result_ctx: Dict[str, Any]) -> str:
+        """Select the user-facing output declared by a JSON skill."""
+        for field_name in getattr(parsed_config, "output_spec", {}) or {}:
+            value = result_ctx.get(field_name)
+            if value:
+                return str(value)
+        return str(result_ctx.get("result", "") or "")
 
     def chat(self, message: str, memory_context: str = "") -> str:
         """Send *message* and return the complete response string.

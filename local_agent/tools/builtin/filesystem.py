@@ -6,6 +6,7 @@ All relative paths are resolved against the active workspace directory
 """
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional
 from local_agent.core.tools import tool
@@ -44,7 +45,30 @@ def fs_write_file(path: str, content: str, append: bool = False) -> str:
             with open(p, "a", encoding="utf-8") as fh:
                 fh.write(content)
         else:
-            p.write_text(content, encoding="utf-8")
+            # Write beside the destination and atomically replace it. A failed
+            # generation/write must not leave a truncated or placeholder file.
+            temp_path: Optional[Path] = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    newline="",
+                    dir=p.parent,
+                    prefix=f".{p.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as fh:
+                    fh.write(content)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                    temp_path = Path(fh.name)
+                os.replace(temp_path, p)
+            finally:
+                if temp_path is not None and temp_path.exists():
+                    temp_path.unlink()
+
+            if p.read_text(encoding="utf-8") != content:
+                return f"Error writing file: verification failed for {p}"
         return f"Successfully {'appended to' if append else 'wrote'} file: {p} ({len(content)} chars)"
     except Exception as e:
         return f"Error writing file: {e}"

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
@@ -183,6 +184,33 @@ class SkillExecutor:
             # 2. 校验输入
             self._validate_input(step_spec, step_input)
 
+            # module_developer's design step is normally an LLM generation
+            # step, but the implementation pass should deterministically reuse
+            # the design document produced by the earlier design-only pass.
+            precomputed_result: Optional[Dict[str, Any]] = None
+            if (
+                skill_name == "module_developer"
+                and step_spec.id == "step_3"
+                and step_spec.type == StepType.LLM
+                and step_input.get("module_name")
+            ):
+                design_path = f"design/{step_input['module_name']}_design.md"
+                read_tool = self._tool_registry.get("fs_read_file")
+                if read_tool is not None:
+                    raw_design = read_tool._run(path=design_path)
+                    if isinstance(raw_design, str) and not raw_design.lstrip().lower().startswith("error"):
+                        precomputed_result = {
+                            "result": raw_design,
+                            "module_design": design_path,
+                            "module_design_content": raw_design,
+                            "module_design_reused": True,
+                        }
+                        logger.info(
+                            "SkillExecutor: reusing existing module design '%s' (%d chars)",
+                            design_path,
+                            len(raw_design),
+                        )
+
             # 3. 构建本次 LLM 调用的消息（全新构建，不累积）
             # TOOL 步骤不需要 LLM，跳过消息构建；
             # AGENT/LLM 步骤注入 skill_prompt，SKILL 步骤不需要
@@ -218,7 +246,7 @@ class SkillExecutor:
                 continue
 
             try:
-                result = self._dispatch(step_spec, step_input, messages)
+                result = precomputed_result or self._dispatch(step_spec, step_input, messages)
             except Exception as exc:
                 result = self._handle_failure(step_spec, exc, ctx)
                 if result is None:
@@ -549,6 +577,7 @@ class SkillExecutor:
         from local_agent.core.debug import print_tool_step_call
 
         all_results: List[str] = []
+        failures: List[str] = []
 
         for tool_idx, tool_name in enumerate(step_spec.tools):
             tool = self._tool_registry.get(tool_name)
@@ -558,6 +587,7 @@ class SkillExecutor:
                     step_spec.id, tool_name,
                 )
                 all_results.append(f"[Tool '{tool_name}' not found, skipped]")
+                failures.append(f"tool '{tool_name}' is not registered")
                 continue
 
             # 确定本次调用的参数
@@ -596,6 +626,9 @@ class SkillExecutor:
                         )
                         all_results.append(
                             f"[{tool_name}] [跳过] path 参数包含非法内容（工具结果或换行符），已忽略此调用"
+                        )
+                        failures.append(
+                            f"tool '{tool_name}' received an invalid path value"
                         )
                         continue
 
@@ -637,6 +670,33 @@ class SkillExecutor:
                         except (json.JSONDecodeError, ValueError):
                             # 不是合法 JSON，继续使用原始值
                             pass
+
+                    # Weak models occasionally wrap a complete source file in
+                    # one Markdown fence despite the prompt. Strip only a
+                    # single outer fence; embedded fences remain untouched.
+                    content_val = call_params.get("content")
+                    path_val = str(call_params.get("path", ""))
+                    if (
+                        tool_name == "fs_write_file"
+                        and isinstance(content_val, str)
+                        and path_val.lower().endswith(
+                            (".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".rs")
+                        )
+                    ):
+                        stripped = content_val.strip()
+                        if stripped.startswith("```") and stripped.endswith("```"):
+                            first_newline = stripped.find("\n")
+                            if first_newline >= 0:
+                                call_params["content"] = stripped[first_newline + 1:-3].rstrip() + "\n"
+
+                    if self._current_skill_name == "code_file_developer" and step_spec.id == "step_3_write":
+                        generated_content = str(call_params.get("content") or "")
+                        if not generated_content.strip():
+                            failures.append("generated file content is empty")
+                            continue
+                        if "TODO: 待实现" in generated_content:
+                            failures.append("generated file content is still a TODO placeholder")
+                            continue
             else:
                 # 回退：直接用 step_input 作为参数
                 call_params = dict(step_input)
@@ -654,12 +714,17 @@ class SkillExecutor:
                     step_spec.id, tool_name, exc,
                 )
                 all_results.append(f"[Tool '{tool_name}' error: {exc}]")
+                failures.append(f"tool '{tool_name}' raised: {exc}")
                 continue
 
             # 解析工具结果
             parsed = self._parse_and_log_tool_result(tool_name, raw_result)
             output_text = parsed.to_llm_context() if parsed else str(raw_result)
             all_results.append(f"[{tool_name}] {output_text}")
+            if parsed is not None and parsed.status == "error":
+                failures.append(f"tool '{tool_name}' failed: {parsed.summary}")
+            elif str(raw_result).lstrip().lower().startswith("error"):
+                failures.append(f"tool '{tool_name}' failed: {raw_result}")
 
             # ── debug: 打印工具调用输入输出 ──────────────────────────────────
             print_tool_step_call(
@@ -668,6 +733,11 @@ class SkillExecutor:
                 tool_name=tool_name,
                 tool_input=call_params,
                 tool_output=output_text,
+            )
+
+        if failures:
+            raise RuntimeError(
+                f"TOOL step [{step_spec.id}] did not complete: " + "; ".join(failures)
             )
 
         combined = "\n".join(all_results)
@@ -1413,6 +1483,201 @@ class SkillExecutor:
             registry = SkillRegistry()
             nested_skill = registry.get(step_spec.nested_skill)
             nested_parsed_config = getattr(nested_skill, "parsed_config", None) if nested_skill else None
+
+            # Deterministic file batching for module_developer. The design
+            # contract uses one ``### module/path.ext`` section per file.
+            # Parse those sections in the framework and invoke the file skill
+            # exactly once per declared file, in document order.
+            module_design_content = step_input.get("module_design_content")
+            if module_design_content is not None and step_spec.nested_skill == "code_file_developer":
+                if nested_parsed_config is None:
+                    raise ValueError("code_file_developer has no parsed config")
+                design_text = str(module_design_content)
+                file_specs: List[Tuple[str, str]] = []
+                # Only scan the declared file-list section. This supports
+                # headings, numbered/bulleted lists, bold/backtick paths, and
+                # a filename heading followed by a separate 路径 field.
+                file_list_match = re.search(
+                    r"^##\s*2[.、]?\s*文件清单\s*$([\s\S]*?)(?=^##\s*3[.、]?|\Z)",
+                    design_text,
+                    re.MULTILINE,
+                )
+                if file_list_match:
+                    file_list_text = file_list_match.group(1)
+                else:
+                    file_list_text = ""
+
+                module_match = re.search(r"design/([A-Za-z0-9_.-]+)_design\.md", design_text)
+                module_name = module_match.group(1) if module_match else ""
+                extension_pattern = (
+                    r"(?:py|pyi|js|jsx|ts|tsx|go|java|rs|md|json|ya?ml|toml|ini|cfg|txt|env)"
+                )
+                candidate_pattern = re.compile(
+                    rf"(?<![A-Za-z0-9_.-])(?P<path>"
+                    rf"(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.{extension_pattern})"
+                )
+                candidates: List[Tuple[str, int]] = []
+                seen_paths: set[str] = set()
+                for match in candidate_pattern.finditer(file_list_text):
+                    file_path = match.group("path")
+                    if "/" not in file_path:
+                        if not module_name:
+                            continue
+                        file_path = f"{module_name}/{file_path}"
+                    if module_name and not file_path.startswith(f"{module_name}/"):
+                        continue
+                    if file_path in seen_paths:
+                        continue
+                    seen_paths.add(file_path)
+                    candidates.append((file_path, match.start()))
+
+                for index, (file_path, start) in enumerate(candidates):
+                    end = candidates[index + 1][1] if index + 1 < len(candidates) else len(file_list_text)
+                    # Include the list marker/heading immediately before the
+                    # path while excluding other files' sections.
+                    section_start = max(
+                        file_list_text.rfind("\n", 0, start),
+                        file_list_text.rfind("###", 0, start),
+                    )
+                    section = file_list_text[max(0, section_start):end].strip()
+                    file_specs.append((file_path, section))
+
+                if not file_specs:
+                    raise ValueError(
+                        "module design contains no parseable paths in its '## 2. 文件清单' section"
+                    )
+
+                tool_registry = ToolRegistry()
+                completed_files: List[str] = []
+                failed_files: List[str] = []
+                for file_path, section in file_specs:
+                    file_task = f"文件路径：{file_path}\n{section}"
+                    try:
+                        sub_executor = SkillExecutor(
+                            tool_registry=tool_registry,
+                            llm=self._llm,
+                            debug_hooks=self._debug_hooks,
+                        )
+                        sub_result = sub_executor.execute(
+                            parsed_config=nested_parsed_config,
+                            initial_input={"task": file_task},
+                            global_context=file_task,
+                        )
+                        final_text = SkillTool._extract_final_output(  # type: ignore[arg-type]
+                            step_spec.nested_skill, sub_result, nested_parsed_config
+                        )
+                        if not final_text or "[Skill Error]" in final_text:
+                            raise RuntimeError(final_text or "nested skill returned no result")
+                        completed_files.append(file_path)
+                    except Exception as exc:  # continue remaining files, fail batch afterwards
+                        logger.exception(
+                            "_run_skill_step: file '%s' failed in batch", file_path
+                        )
+                        failed_files.append(f"{file_path}: {exc}")
+
+                if failed_files:
+                    raise RuntimeError(
+                        "File batch incomplete "
+                        f"({len(completed_files)}/{len(file_specs)} succeeded): "
+                        + "; ".join(failed_files)
+                    )
+
+                result = {"result": "\n".join(f"{path}: success" for path in completed_files)}
+                print_skill_invocation_output(
+                    parent_skill=parent_skill_name,
+                    step_id=step_spec.id,
+                    nested_skill=step_spec.nested_skill,
+                    result=result,
+                )
+                return with_mapped_outputs(result)
+
+            # Deterministic module batching. Module orchestration must not rely
+            # on an LLM remembering to emit one invoke_skill call per item.
+            module_list_raw = step_input.get("module_list")
+            if module_list_raw is not None:
+                if nested_parsed_config is None:
+                    raise ValueError(
+                        f"Nested skill '{step_spec.nested_skill}' has no parsed config"
+                    )
+
+                if isinstance(module_list_raw, list):
+                    modules = module_list_raw
+                elif isinstance(module_list_raw, str):
+                    try:
+                        modules = json.loads(module_list_raw.strip())
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(f"module_list is not valid JSON: {exc}") from exc
+                else:
+                    raise ValueError("module_list must be a JSON array or list")
+
+                if not isinstance(modules, list) or not modules:
+                    raise ValueError("module_list must contain at least one module")
+
+                tool_registry = ToolRegistry()
+                completed: List[str] = []
+                failed: List[str] = []
+                result_lines: List[str] = []
+
+                for index, module in enumerate(modules):
+                    if not isinstance(module, dict):
+                        failed.append(f"item {index + 1}: expected object")
+                        continue
+                    module_name = str(module.get("module_name") or "").strip()
+                    if not module_name:
+                        failed.append(f"item {index + 1}: missing module_name")
+                        continue
+
+                    module_task = (
+                        f"模块名：{module_name}\n"
+                        f"编程语言：{module.get('language', '')}\n"
+                        f"职责：{module.get('description', '')}\n"
+                        f"对外接口：{module.get('interfaces', '')}\n"
+                        f"依赖模块：{module.get('dependencies', '无')}\n"
+                        f"技术选型：{module.get('tech_stack', '')}\n"
+                        f"设计文档路径：design/{module_name}_design.md"
+                    )
+                    if step_spec.batch_task_suffix:
+                        module_task += "\n" + step_spec.batch_task_suffix.strip()
+
+                    try:
+                        sub_executor = SkillExecutor(
+                            tool_registry=tool_registry,
+                            llm=self._llm,
+                            debug_hooks=self._debug_hooks,
+                        )
+                        sub_result = sub_executor.execute(
+                            parsed_config=nested_parsed_config,
+                            initial_input={"task": module_task},
+                            global_context=module_task,
+                        )
+                        final_text = SkillTool._extract_final_output(  # type: ignore[arg-type]
+                            step_spec.nested_skill, sub_result, nested_parsed_config
+                        )
+                        if not final_text or "[Skill Error]" in final_text:
+                            raise RuntimeError(final_text or "nested skill returned no result")
+                        completed.append(module_name)
+                        result_lines.append(f"{module_name}: success")
+                    except Exception as exc:  # continue remaining modules, fail batch afterwards
+                        logger.exception(
+                            "_run_skill_step: module '%s' failed in batch", module_name
+                        )
+                        failed.append(f"{module_name}: {exc}")
+                        result_lines.append(f"{module_name}: failed")
+
+                if failed:
+                    raise RuntimeError(
+                        "Module batch incomplete "
+                        f"({len(completed)}/{len(modules)} succeeded): " + "; ".join(failed)
+                    )
+
+                result = {"result": "\n".join(result_lines)}
+                print_skill_invocation_output(
+                    parent_skill=parent_skill_name,
+                    step_id=step_spec.id,
+                    nested_skill=step_spec.nested_skill,
+                    result=result,
+                )
+                return with_mapped_outputs(result)
 
             # ── 模式 2：filtered_urls 列表 → 逐个调用 ────────────────────────────
             filtered_urls_raw = step_input.get("filtered_urls")

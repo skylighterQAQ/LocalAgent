@@ -366,9 +366,10 @@ class ToolResultParser:
 
     def _parse_write_result(self, tool_name: str, raw: str) -> ParsedToolResult:
         """解析文件写入结果。"""
+        is_error = raw.lstrip().lower().startswith("error")
         return ParsedToolResult(
             tool_name=tool_name,
-            status="success",
+            status="error" if is_error else "success",
             summary=raw[:500],
             structured_data=None,
             raw=raw,

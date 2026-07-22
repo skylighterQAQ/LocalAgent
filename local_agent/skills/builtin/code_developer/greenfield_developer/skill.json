@@ -170,10 +170,11 @@
     {
       "id": "step_2_5",
       "name": "批量生成所有模块 Design 文档",
-      "type": "agent",
+      "type": "skill",
       "description": "根据 module_list，为每个模块生成详细的 design/{module_name}_design.md 文档（仅设计，不写代码）。所有模块的 design 文档全部生成完毕后，再进入代码实现阶段。",
-      "tools": ["invoke_skill"],
-      "nested_skill": null,
+      "tools": [],
+      "nested_skill": "module_developer",
+      "batch_task_suffix": "执行模式：design_only",
       "input_mapping": {
         "task": "task",
         "module_list": "module_list"
@@ -186,29 +187,29 @@
       "output_spec": {"all_designs": "string - 已生成 design 文档的所有模块列表"},
       "input_validation_policy": "warn",
       "output_validation_policy": "warn",
-      "on_failure": "skip",
+      "on_failure": "raise",
       "step_prompt": "你的任务是根据 module_list 中的模块清单，为每个模块生成详细的 design 文档。\n\n⚠️ 【重要】本步骤只生成 design 文档，不生成任何代码。代码实现在后续步骤完成。\n\n⚠️ 【严格禁止：调用错误的 skill】\n调用 invoke_skill 时，skill_name 只能是 \"module_developer\"，绝对禁止传入 \"greenfield_developer\" 或任何其他 skill 名称。\n如果传入 \"greenfield_developer\"，系统会直接拒绝并返回错误，请务必使用正确的 \"module_developer\"。\n\n【解析 module_list】\n将 module_list 解析为模块列表（JSON 数组）。\n\n【逐模块生成 design 文档】\n按照列表中的模块顺序，对每个模块调用 invoke_skill：\n- skill_name: \"module_developer\"  ← 必须是这个，不能是 greenfield_developer\n- task: 仅包含当前模块信息的字符串，格式：\n  模块名：<module_name>\n  编程语言：<language>\n  职责：<description>\n  对外接口：<interfaces>\n  依赖模块：<dependencies>\n  技术选型：<tech_stack>\n  设计文档路径：design/<module_name>_design.md\n  执行模式：design_only（仅生成设计文档，不实现代码）\n\n注意：module_developer 接收到 \"执行模式：design_only\" 后，只会生成 design 文档（step_1~step_3），跳过代码实现（step_4）。\n\n【约束】\n- 每次调用 invoke_skill 时，task 只包含当前模块的信息\n- 必须等待当前模块的 design 文档生成完成后，再处理下一个模块\n- 如果某个模块调用失败，记录错误后继续处理下一个模块\n\n【最终输出】\n所有模块 design 文档生成完后，输出：\nresult=已生成 design 文档的模块：\n<每个模块名，每行一个>\n"
     },
     {
       "id": "step_3",
       "name": "逐模块实现代码",
-      "type": "agent",
+      "type": "skill",
       "description": "所有模块 design 文档已预先生成，按顺序逐个调用 module_developer 实现每个模块的代码。module_developer 会检测到 design 文档已存在，直接进入代码实现阶段。",
-      "tools": ["invoke_skill"],
-      "nested_skill": null,
+      "tools": [],
+      "nested_skill": "module_developer",
       "input_mapping": {
         "task": "task",
         "module_list": "module_list"
       },
-      "output_mapping": {"implemented_modules": "result"},
+      "output_mapping": {"result": "result"},
       "input_spec": {
         "task": "string - 项目需求描述",
         "module_list": "string - step_2 输出的模块清单（JSON 数组字符串）"
       },
-      "output_spec": {"implemented_modules": "string - 已实现的所有模块及文件列表"},
+      "output_spec": {"result": "string - 已实现的所有模块及文件列表"},
       "input_validation_policy": "warn",
       "output_validation_policy": "warn",
-      "on_failure": "skip",
+      "on_failure": "raise",
       "step_prompt": "你的任务是根据 module_list 中的模块清单，按顺序逐个调用 module_developer 来实现每个模块的代码。\n\n⚠️ 【重要提示】所有模块的 design 文档已在上一步生成完毕（存于 design/<module_name>_design.md）。module_developer 会检测到 design 文档已存在，跳过 design 阶段，直接进入代码实现。\n\n⚠️ 【严格禁止：调用错误的 skill】\n调用 invoke_skill 时，skill_name 只能是 \"module_developer\"，绝对禁止传入 \"greenfield_developer\" 或任何其他 skill 名称。\n如果传入 \"greenfield_developer\"，系统会直接拒绝并返回错误，请务必使用正确的 \"module_developer\"。\n\n【解析 module_list】\n将 module_list 解析为模块列表（JSON 数组）。\n\n【逐模块调用 module_developer】\n按照列表中的模块顺序，对每个模块调用 invoke_skill，参数如下：\n- skill_name: \"module_developer\"  ← 必须是这个，不能是 greenfield_developer\n- task: 仅包含当前模块信息的字符串，格式：\n  模块名：<module_name>\n  编程语言：<language>\n  职责：<description>\n  对外接口：<interfaces>\n  依赖模块：<dependencies>\n  技术选型：<tech_stack>\n  设计文档路径：design/<module_name>_design.md\n\n【约束】\n- 每次调用 invoke_skill 时，task 只包含当前模块的信息，绝对不要把所有模块信息都传入\n- 必须等待当前模块的 invoke_skill 返回结果后，再处理下一个模块\n- 如果某个模块调用失败，记录错误后继续处理下一个模块（不要中止整个流程）\n- 记录每个模块的调用结果（成功/失败）\n\n【最终输出】\n所有模块处理完后，输出以下格式的文字汇报：\nresult=已实现模块：\n<每个模块名，每行一个>\n"
     }
   ],

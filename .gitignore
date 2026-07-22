@@ -56,3 +56,6 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+
+# Local workspace files
+/WORKSPACE/

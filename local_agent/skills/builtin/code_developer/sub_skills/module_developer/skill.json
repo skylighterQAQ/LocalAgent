@@ -74,7 +74,7 @@
       "tools": ["fs_read_file"],
       "nested_skill": null,
       "input_mapping": {"task": "task", "module_name": "module_name"},
-      "output_mapping": {"module_design": "module_design", "module_design_content": "module_design_content"},
+      "output_mapping": {"module_design": "module_design", "module_design_content": "module_design_content", "module_design_reused": "module_design_reused"},
       "input_spec": {
         "task": "string - 模块设计要求（包含模块名、语言、职责、接口、依赖、技术选型、设计文档路径）",
         "module_name": "string - 模块名称"
@@ -120,18 +120,20 @@
       "input_mapping": {
         "task": "task",
         "module_design": "module_design",
+        "module_design_content": "module_design_content",
         "design_only": "design_only"
       },
       "output_mapping": {"result": "result"},
       "input_spec": {
         "task": "string - 模块设计要求",
         "module_design": "string - 模块设计文档路径 + 文件清单",
+        "module_design_content": "string - 模块设计文档完整内容，用于框架逐文件调度",
         "design_only": "string - 'true' 表示仅生成设计文档，跳过代码实现"
       },
       "output_spec": {"result": "string - 已实现的所有文件路径列表，或 design_only 模式下的跳过说明"},
       "input_validation_policy": "warn",
       "output_validation_policy": "warn",
-      "on_failure": "skip",
+      "on_failure": "raise",
       "step_prompt": "⚠️ 【首先检查执行模式】\n若 design_only 字段值为 \"true\"，则立即输出跳过说明，不要读取任何文件，不要调用任何工具：\nresult=design_only 模式：跳过代码实现，设计文档已生成\n\n仅当 design_only 不为 \"true\" 时，才执行以下代码实现步骤：\n\n读取 module_design 中指定的设计文档（fs_read_file），获取文件清单和实现顺序。\n\n按顺序对每个文件调用 code_file_developer sub_skill：\n- 每次调用的 task 输入：只包含当前文件的设计说明（文件路径 + 文件类型 + 职责 + 主要接口 + 它依赖的文件 + 与外部模块的交互关系），不要把整个模块所有文件的信息都传入\n- 等待每个文件实现完成后再处理下一个\n- 如某个文件实现失败，记录错误并继续处理其余文件（不要因单个文件失败而中止整个模块）\n\n全部文件实现完成后，输出 result=<模块名> 已实现文件：\\n<每行一个文件路径>\n"
     }
   ],

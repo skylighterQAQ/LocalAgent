@@ -48,25 +48,24 @@
     },
     {
       "id": "step_2",
-      "name": "创建代码文件",
+      "name": "创建代码目录",
       "type": "tool",
-      "description": "直接调用工具（不经过 LLM）：在目标文件路径创建目录并写入占位文件，确保文件存在",
-      "tools": ["fs_create_dir", "fs_write_file"],
+      "description": "直接调用工具（不经过 LLM）：创建目标文件所在目录；目标文件仅在完整内容生成后写入",
+      "tools": ["fs_create_dir"],
       "tool_params": [
-        {"path": "{target_file_dir}"},
-        {"path": "{target_file_path}", "content": "# TODO: 待实现\n# 文件：{target_file_path}\n"}
+        {"path": "{target_file_dir}"}
       ],
       "nested_skill": null,
       "input_mapping": {
         "target_file_path": "target_file_path",
         "target_file_dir": "target_file_dir"
       },
-      "output_mapping": {"file_path": "result"},
+      "output_mapping": {"scaffold_result": "result"},
       "input_spec": {
         "target_file_path": "string - 目标文件路径（由 step_1 提取）",
         "target_file_dir": "string - 目标文件所在目录（由框架从 target_file_path 推断）"
       },
-      "output_spec": {"file_path": "string - 已创建的文件路径"},
+      "output_spec": {"scaffold_result": "string - 目标目录创建结果"},
       "input_validation_policy": "warn",
       "output_validation_policy": "warn",
       "on_failure": "raise",
@@ -82,7 +81,7 @@
       "input_mapping": {
         "task": "task",
         "context": "context",
-        "file_path": "file_path"
+        "file_path": "target_file_path"
       },
       "output_mapping": {"file_content": "file_content"},
       "input_spec": {
@@ -106,13 +105,13 @@
         {"path": "{file_path}", "content": "{file_content}"}
       ],
       "nested_skill": null,
-      "input_mapping": {"file_path": "file_path", "file_content": "file_content"},
-      "output_mapping": {"file_path": "result"},
+      "input_mapping": {"file_path": "target_file_path", "file_content": "file_content"},
+      "output_mapping": {"write_result": "result"},
       "input_spec": {
         "file_path": "string - 目标文件路径",
         "file_content": "string - 完整的文件内容"
       },
-      "output_spec": {"file_path": "string - 已写入的文件路径"},
+      "output_spec": {"write_result": "string - 文件写入成功结果"},
       "input_validation_policy": "warn",
       "output_validation_policy": "warn",
       "on_failure": "raise",
@@ -126,7 +125,7 @@
       "tools": ["code_lint_multi", "code_format", "fs_read_file", "fs_write_file"],
       "nested_skill": null,
       "input_mapping": {
-        "file_path": "file_path"
+        "file_path": "target_file_path"
       },
       "output_mapping": {"result": "result"},
       "input_spec": {"file_path": "string - 已写入的文件路径"},

@@ -59,6 +59,13 @@ class StepSpec(BaseModel):
         default=None,
         description="嵌套调用的 skill 名称（仅 SKILL 类型有效）",
     )
+    batch_task_suffix: str = Field(
+        default="",
+        description=(
+            "SKILL 类型批处理专用：当输入包含 module_list 时，框架按模块顺序"
+            "调用 nested_skill，并将该文本追加到每个模块的 task。"
+        ),
+    )
 
     # 输入输出映射
     input_mapping: Dict[str, str] = Field(

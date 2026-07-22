@@ -14,6 +14,8 @@ Supports:
 import subprocess
 import sys
 import os
+import hashlib
+import json
 import tempfile
 import time
 import traceback
@@ -461,6 +463,226 @@ def code_lint_multi(code: str, language: str = "python") -> str:
         return f"Linting for '{language}' is not yet supported. Supported: python, js, ts, bash"
 
     return "\n".join(results)
+
+
+def _resolve_workspace_file(file_path: str) -> Path:
+    """Resolve a source path against the active workspace without changing cwd."""
+    path = Path(file_path).expanduser()
+    if not path.is_absolute():
+        workspace = _effective_cwd(None)
+        if workspace:
+            path = Path(workspace) / path
+    return path.resolve()
+
+
+def _validation_payload(file_path: str, language: str = "") -> dict:
+    """Validate the exact bytes stored on disk and return a machine-readable result."""
+    path = _resolve_workspace_file(file_path)
+    payload = {
+        "passed": False,
+        "status": "error",
+        "file_path": str(path),
+        "language": language,
+        "errors": [],
+        "warnings": [],
+        "checker_available": True,
+        "content_sha256": "",
+    }
+    if not path.exists():
+        payload["errors"].append("file does not exist")
+        return payload
+    if not path.is_file():
+        payload["errors"].append("path is not a file")
+        return payload
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        payload["errors"].append(f"unable to read UTF-8 file: {exc}")
+        return payload
+
+    payload["content_sha256"] = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    if not content.strip():
+        payload["errors"].append("file is empty")
+        return payload
+    if "TODO: 待实现" in content or "（待填充）" in content:
+        payload["errors"].append("file still contains a generated placeholder")
+
+    detected = language.strip().lower() if language else _EXT_TO_LANG.get(path.suffix.lower(), "")
+    detected = _LANG_ALIASES.get(detected, detected)
+    payload["language"] = detected or path.suffix.lower().lstrip(".") or "text"
+
+    if detected == "python":
+        try:
+            compile(content, str(path), "exec")
+        except SyntaxError as exc:
+            payload["errors"].append(f"syntax error at line {exc.lineno}: {exc.msg}")
+
+        pyflakes = _run_subprocess(
+            [sys.executable, "-m", "pyflakes", str(path)], timeout=15
+        )
+        if pyflakes["returncode"] == 0:
+            pass
+        elif "No module named pyflakes" in (pyflakes["stderr"] or ""):
+            payload["warnings"].append("pyflakes is unavailable; syntax-only validation used")
+            payload["checker_available"] = False
+        else:
+            diagnostics = (pyflakes["stdout"] or pyflakes["stderr"]).strip()
+            if diagnostics:
+                payload["errors"].extend(diagnostics.splitlines())
+
+        flake8 = _which("flake8")
+        if flake8:
+            flake = _run_subprocess(
+                [flake8, "--max-line-length=120", str(path)], timeout=15
+            )
+            for line in (flake["stdout"] or "").splitlines():
+                # Pyflakes already covers F-codes. Treat syntax-class E9xx as
+                # blocking and ordinary formatting diagnostics as warnings.
+                if re.search(r"\sE9\d{2}\s", line):
+                    payload["errors"].append(line)
+                elif not re.search(r"\sF\d{3}\s", line):
+                    payload["warnings"].append(line)
+    elif detected == "javascript":
+        node = _which("node")
+        if node:
+            result = _run_subprocess([node, "--check", str(path)], timeout=15)
+            if result["returncode"] != 0:
+                payload["errors"].append((result["stderr"] or result["stdout"]).strip())
+        else:
+            payload["checker_available"] = False
+            payload["warnings"].append("node is unavailable; non-empty validation only")
+    elif detected == "typescript":
+        tsc = _which("tsc")
+        if tsc:
+            result = _run_subprocess([tsc, "--noEmit", str(path)], timeout=20)
+            if result["returncode"] != 0:
+                payload["errors"].append((result["stdout"] or result["stderr"]).strip())
+        else:
+            payload["checker_available"] = False
+            payload["warnings"].append("tsc is unavailable; non-empty validation only")
+    elif detected in ("bash", "sh", "shell"):
+        checker = _which("shellcheck")
+        if checker:
+            result = _run_subprocess([checker, str(path)], timeout=15)
+        else:
+            checker = _which("bash")
+            result = _run_subprocess([checker, "-n", str(path)], timeout=15) if checker else None
+        if result is None:
+            payload["checker_available"] = False
+            payload["warnings"].append("no shell checker is available; non-empty validation only")
+        elif result["returncode"] != 0:
+            payload["errors"].append((result["stdout"] or result["stderr"]).strip())
+    elif path.suffix.lower() == ".json":
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as exc:
+            payload["errors"].append(f"invalid JSON at line {exc.lineno}: {exc.msg}")
+    elif path.suffix.lower() in (".yaml", ".yml"):
+        try:
+            import yaml
+            yaml.safe_load(content)
+        except ImportError:
+            payload["checker_available"] = False
+            payload["warnings"].append("PyYAML is unavailable; non-empty validation only")
+        except Exception as exc:
+            payload["errors"].append(f"invalid YAML: {exc}")
+
+    payload["errors"] = [item for item in payload["errors"] if item]
+    payload["warnings"] = [item for item in payload["warnings"] if item]
+    payload["passed"] = not payload["errors"]
+    payload["status"] = "success" if payload["passed"] else "error"
+    return payload
+
+
+@tool
+def code_validate_file(file_path: str, language: str = "") -> str:
+    """Validate the exact file stored in the active workspace.
+
+    Returns JSON with passed/status/errors/warnings and a content hash. Unsupported
+    document formats receive non-empty validation rather than a false lint success.
+    """
+    return json.dumps(
+        _validation_payload(file_path=file_path, language=language),
+        ensure_ascii=False,
+    )
+
+
+@tool
+def code_verify_project(
+    path: str = ".",
+    require_tests: bool = True,
+    require_entrypoint: bool = True,
+    timeout: int = 120,
+) -> str:
+    """Fail-closed verification for a generated project.
+
+    Validates every supported source/config file from disk, requires tests and a
+    runnable entrypoint when requested, and executes discovered Python tests.
+    """
+    root = _resolve_workspace_file(path)
+    result = {
+        "passed": False,
+        "status": "error",
+        "root": str(root),
+        "files_checked": 0,
+        "errors": [],
+        "warnings": [],
+        "test_result": None,
+        "entrypoints": [],
+    }
+    if not root.exists() or not root.is_dir():
+        result["errors"].append("project path does not exist or is not a directory")
+        return json.dumps(result, ensure_ascii=False)
+
+    ignored = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache"}
+    supported = set(_EXT_TO_LANG) | {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".md"}
+    source_files = [
+        item for item in root.rglob("*")
+        if item.is_file()
+        and item.suffix.lower() in supported
+        and not any(part in ignored for part in item.parts)
+        and "design" not in item.relative_to(root).parts
+    ]
+    for item in source_files:
+        validation = _validation_payload(str(item))
+        result["files_checked"] += 1
+        result["warnings"].extend(
+            f"{item.relative_to(root)}: {warning}" for warning in validation["warnings"]
+        )
+        result["errors"].extend(
+            f"{item.relative_to(root)}: {error}" for error in validation["errors"]
+        )
+
+    test_files = [
+        item for item in source_files
+        if item.name.startswith("test_")
+        or item.name.endswith("_test.py")
+        or ".test." in item.name
+    ]
+    if require_tests and not test_files:
+        result["errors"].append("no test files were generated")
+    elif any(item.suffix.lower() == ".py" for item in test_files):
+        test_run = _run_subprocess(
+            [sys.executable, "-m", "pytest", str(root), "--tb=short", "-q"],
+            timeout=timeout,
+            cwd=str(root),
+        )
+        result["test_result"] = test_run
+        if test_run["returncode"] != 0:
+            result["errors"].append(
+                "tests failed: " + (test_run["stdout"] or test_run["stderr"]).strip()
+            )
+
+    entrypoint_names = {"main.py", "app.py", "run.py", "cli.py", "main.js", "index.js", "main.ts", "index.ts"}
+    entrypoints = [item for item in source_files if item.name.lower() in entrypoint_names]
+    result["entrypoints"] = [str(item.relative_to(root)) for item in entrypoints]
+    if require_entrypoint and not entrypoints:
+        result["errors"].append("no runnable project entrypoint was generated")
+
+    result["passed"] = not result["errors"]
+    result["status"] = "success" if result["passed"] else "error"
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _lint_python(code: str) -> list:
